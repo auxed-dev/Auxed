@@ -10,9 +10,10 @@ export default route({
   async POST(ctx) {
     const b = body(ctx);
     return playerEvent(ctx.db, requireUser(ctx), query(ctx, 'id')!, {
-      event: oneOf(b.event, 'Event', ['started', 'ended'] as const),
+      event: oneOf(b.event, 'Event', ['started', 'ended', 'device'] as const),
       requestId: b.requestId ? str(b.requestId, 'Request', { max: 40 }) : null,
       track: b.track ? sanitizeTrack(b.track) : null,
+      deviceId: b.deviceId ? str(b.deviceId, 'Device', { max: 100 }) : null,
     });
   },
 });

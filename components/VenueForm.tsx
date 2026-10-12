@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { prepareImage, uploadImage } from '@/lib/client/image';
 import { errorMessage } from '@/lib/client/api';
 import { cx } from '@/lib/util';
+import { GENRE_SUGGESTIONS, MAX_HOUSE_GENRES } from '@/lib/genres';
 import type { VenueDTO, VenueKind } from '@/lib/types';
 import { VenueLogo } from './VenueLogo';
 import { IconCamera, IconPin } from './Icons';
@@ -32,6 +33,7 @@ export const EMPTY_VENUE: VenueFormValue = {
   waitMinutes: null,
   artistSharePct: 50,
   safetyPhone: null,
+  musicGenres: [],
 };
 
 const KINDS: { value: VenueKind; label: string }[] = [
@@ -158,6 +160,26 @@ export function VenueForm({ initial, submitLabel, onSubmit }: { initial: VenueFo
           <input className="field" inputMode="numeric" value={v.artistSharePct} onChange={(e) => set('artistSharePct', Math.min(100, num(e.target.value)))} />
         </Field>
       </div>
+      <Field label="House sound">
+        <div className="flex flex-wrap gap-2">
+          {GENRE_SUGGESTIONS.map((g) => {
+            const on = v.musicGenres.includes(g);
+            return (
+              <button
+                key={g}
+                type="button"
+                aria-pressed={on}
+                disabled={!on && v.musicGenres.length >= MAX_HOUSE_GENRES}
+                onClick={() => set('musicGenres', on ? v.musicGenres.filter((x) => x !== g) : [...v.musicGenres, g])}
+                className={cx('rounded-full px-3 py-1.5 font-ui text-[12px] transition disabled:opacity-40', on ? 'bg-lime font-semibold text-lime-ink' : 'bg-white/10 text-white/75')}
+              >
+                {g}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1.5 px-1 font-ui text-[11px] text-white/50">The genres you want played here. Request suggestions lean towards your house sound and the DJ&apos;s genre mix.</p>
+      </Field>
       <Field label="Safety / security phone (SOS button)">
         <input className="field" inputMode="tel" value={v.safetyPhone ?? ''} placeholder="+27…" onChange={(e) => set('safetyPhone', e.target.value || null)} />
       </Field>

@@ -168,6 +168,8 @@ export const venues = pgTable(
     /** Members listen free with this code (null = no member perk). */
     auxInMemberCode: text('aux_in_member_code'),
     artistSharePct: integer('artist_share_pct').notNull().default(50),
+    /** House sound: genres the venue wants played (shapes request suggestions). */
+    musicGenres: jsonb('music_genres').$type<string[]>().notNull().default([]),
     createdAt: created(),
   },
   (t) => [index('venues_owner_idx').on(t.ownerId)],

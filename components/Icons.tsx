@@ -99,6 +99,13 @@ export const IconPlay = (p: P) => (
   </svg>
 );
 
+export const IconPause = (p: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" {...base(p)}>
+    <rect x="6" y="4.5" width="4.2" height="15" rx="1.3" />
+    <rect x="13.8" y="4.5" width="4.2" height="15" rx="1.3" />
+  </svg>
+);
+
 export const IconCheck = (p: P) => (
   <svg viewBox="0 0 24 24" fill="none" {...base(p)}>
     <path d="m4.5 12.5 5 5 10-11" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />

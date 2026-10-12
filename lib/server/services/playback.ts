@@ -5,14 +5,21 @@
  *    actually playing so "now playing" and request statuses follow the speakers.
  *  - APPLE_MUSIC / YOUTUBE: the AUXED Player page (/player/[id]) runs on the device connected to
  *    the speakers, plays the queue itself and reports back.
+ *  - SPOTIFY + AUXED Player: the player page becomes the account's Spotify Connect speaker (Web
+ *    Playback SDK) and plays the queue like the other players; the hand-off above stands down.
  */
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { DB } from '../../db';
-import { performances, requests, requestVotes, venues } from '../../db/schema';
+import { musicConnections, performances, requests, requestVotes, users, venues } from '../../db/schema';
 import type { NowPlaying, PlaybackTarget, Track } from '../../types';
 import { HttpError, bad, forbidden, notFound } from '../http';
 import type { AuthedUser } from '../session';
 import { spotifyAccess, spotifyNowPlaying, spotifyQueue, spotifyUriFor, youtubeIdFor } from '../musicConnect';
+import { findOnItunes } from '../music';
+
+/** The AUXED Player counts as open while it has checked in within this window. */
+const PLAYER_ONLINE_MS = 60_000;
+const playerDriving = (pb: PlaybackTarget) => !!pb.deviceId && !!pb.playerSeenAt && Date.now() - new Date(pb.playerSeenAt).getTime() < PLAYER_ONLINE_MS;
 import { notifyNowPlaying, notifyUser } from '../push';
 import { loadPerformance, type PerformanceRow } from './core';
 
@@ -40,12 +47,13 @@ export async function setPlayback(db: DB, user: AuthedUser, performanceId: strin
 const score = sql<number>`${requests.baseUp} - ${requests.baseDown} + coalesce((select sum(${requestVotes.value}) from ${requestVotes} where ${requestVotes.requestId} = ${requests.id}), 0)`;
 
 async function queuedInOrder(db: DB, performanceId: string, limit: number, notHandedOff = false) {
-  return db
-    .select()
+  const rows = await db
+    .select({ r: requests, score })
     .from(requests)
     .where(and(eq(requests.performanceId, performanceId), eq(requests.status, 'QUEUED'), notHandedOff ? isNull(requests.externalQueuedAt) : undefined))
     .orderBy(desc(score), asc(requests.decidedAt))
     .limit(limit);
+  return rows.map(({ r, score: s }) => ({ ...r, score: Number(s ?? 0) }));
 }
 
 async function venueNameOf(db: DB, perf: PerformanceRow) {
@@ -71,6 +79,8 @@ const lastSync = new Map<string, number>();
 export async function syncExternal(db: DB, perf: PerformanceRow): Promise<PerformanceRow> {
   const pb = perf.playback;
   if (!pb || pb.provider !== 'SPOTIFY' || perf.endedAt) return perf;
+  // The AUXED Player is the Spotify speaker and plays the queue itself.
+  if (playerDriving(pb)) return perf;
   if (Date.now() - (lastSync.get(perf.id) ?? 0) < 5000) return perf;
   lastSync.set(perf.id, Date.now());
   let error: string | null = null;
@@ -130,7 +140,9 @@ export interface PlayerItem {
   track: Track;
   appleId: string | null;
   youtubeId: string | null;
-  requestedBy: string | null;
+  spotifyUri: string | null;
+  requestedBy: { userName: string; avatarUrl: string | null; ring: string } | null;
+  votes: number;
 }
 
 /** What the AUXED Player should play next (approved requests by votes, then the set list). */
@@ -139,30 +151,67 @@ export async function playerQueue(db: DB, user: AuthedUser, performanceId: strin
   if (!perf) throw notFound('Set not found.');
   if (!(await canControl(db, user, perf))) throw forbidden();
   const provider = perf.playback?.provider ?? null;
-  if (provider !== 'APPLE_MUSIC' && provider !== 'YOUTUBE') throw bad('Choose Apple Music or YouTube as the playback for this set first.');
+  if (!provider) throw bad('Turn on auto-queue (Spotify, Apple Music or YouTube) for this set first.');
+  // Spotify: the speaker runs on the account of whoever opened the player.
+  const spotifyToken = provider === 'SPOTIFY' ? await spotifyAccess(db, user.id) : null;
+  if (provider === 'SPOTIFY' && !spotifyToken) throw new HttpError(409, 'Connect Spotify on this login to use the AUXED Player.', 'CONNECT_SPOTIFY');
   await db
     .update(performances)
     .set({ playback: { ...perf.playback!, playerSeenAt: new Date().toISOString() } })
     .where(eq(performances.id, perf.id));
   const queued = await queuedInOrder(db, perf.id, 5);
-  const items: PlayerItem[] = queued.filter((q) => q.track).map((q) => ({ requestId: q.id, track: q.track!, appleId: null, youtubeId: null, requestedBy: null }));
+  const people = queued.length ? await db.select({ id: users.id, userName: users.userName, avatarUrl: users.avatarUrl, ring: users.ring }).from(users).where(inArray(users.id, queued.map((q) => q.userId))) : [];
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const items: PlayerItem[] = queued
+    .filter((q) => q.track)
+    .map((q) => {
+      const u = byId.get(q.userId);
+      return {
+        requestId: q.id,
+        track: q.track!,
+        appleId: null,
+        youtubeId: null,
+        spotifyUri: null,
+        requestedBy: u ? { userName: u.userName, avatarUrl: u.avatarUrl, ring: u.ring ?? '#FFFFFF' } : null,
+        votes: Number(q.score ?? 0),
+      };
+    });
   // Then the artist's set list, continuing from where playback is (wrapping around).
   const n = perf.setlist.length;
   for (let k = 0; n && items.length < 5 && k < n; k++) {
-    items.push({ requestId: null, track: perf.setlist[(perf.setCursor + k) % n], appleId: null, youtubeId: null, requestedBy: null });
+    items.push({ requestId: null, track: perf.setlist[(perf.setCursor + k) % n], appleId: null, youtubeId: null, spotifyUri: null, requestedBy: null, votes: 0 });
   }
   for (const [i, it] of items.entries()) {
     if (it.track.source === 'itunes' && it.track.externalId) it.appleId = it.track.externalId;
+    // Apple Music ids are iTunes ids: find the same recording for songs from elsewhere.
+    else if (provider === 'APPLE_MUSIC' && i < 2) it.appleId = (await findOnItunes(it.track))?.externalId ?? null;
     if (provider === 'YOUTUBE' && i < 2) it.youtubeId = await youtubeIdFor(db, it.track);
+    if (spotifyToken && i < 2) it.spotifyUri = await spotifyUriFor(db, spotifyToken, it.track).catch(() => null);
   }
-  return { provider, title: perf.title, nowPlaying: perf.nowPlaying ?? null, items };
+  const account = provider === 'SPOTIFY' ? ((await db.select({ n: musicConnections.displayName }).from(musicConnections).where(and(eq(musicConnections.userId, user.id), eq(musicConnections.provider, 'SPOTIFY'))).limit(1))[0]?.n ?? null) : null;
+  return { provider, title: perf.title, account, nowPlaying: perf.nowPlaying ?? null, items };
 }
 
-/** Player reports: a song started, ended, or a heartbeat. */
-export async function playerEvent(db: DB, user: AuthedUser, performanceId: string, ev: { event: 'started' | 'ended'; requestId?: string | null; track?: Track | null }) {
+/** Player reports: its Spotify speaker is ready, or a song started / ended. */
+export async function playerEvent(
+  db: DB,
+  user: AuthedUser,
+  performanceId: string,
+  ev: { event: 'started' | 'ended' | 'device'; requestId?: string | null; track?: Track | null; deviceId?: string | null },
+) {
   const perf = (await db.select().from(performances).where(eq(performances.id, performanceId)).limit(1))[0];
   if (!perf) throw notFound('Set not found.');
   if (!(await canControl(db, user, perf))) throw forbidden();
+  if (ev.event === 'device') {
+    if (perf.playback?.provider !== 'SPOTIFY') throw bad('This set is not set to auto-queue on Spotify.');
+    await db
+      .update(performances)
+      .set({ playback: { ...perf.playback, deviceId: ev.deviceId ?? null, playerSeenAt: new Date().toISOString(), lastError: null } })
+      .where(eq(performances.id, perf.id));
+    // Songs handed to the old device's queue are no longer in flight; the player takes over from here.
+    await db.update(requests).set({ externalQueuedAt: null, externalRef: null }).where(and(eq(requests.performanceId, perf.id), eq(requests.status, 'QUEUED')));
+    return { ok: true };
+  }
   if (ev.event === 'ended') {
     if (ev.requestId) await db.update(requests).set({ status: 'PLAYED', playedAt: new Date() }).where(and(eq(requests.id, ev.requestId), eq(requests.performanceId, perf.id)));
     return { ok: true };

@@ -185,7 +185,12 @@ export function AutoQueueSheet({ room, open, onClose, onChanged }: { room: RoomD
     <Sheet open={open} onClose={onClose} title="Auto-queue requests">
       <div className="flex flex-col gap-2 pb-2">
         <Opt id={null} title="Off" sub="You (or the DJ) play approved requests manually." />
-        <Opt id="SPOTIFY" title={`Spotify${spotify ? ` · ${spotify.displayName}` : ''}`} sub="Approved requests are added to the queue on whatever device Spotify is playing on. Needs Spotify Premium.">
+        <Opt
+          id="SPOTIFY"
+          title={`Spotify${spotify ? ` · ${spotify.displayName}` : ''}`}
+          sub="Approved requests go to whatever device Spotify is playing on — or open the AUXED Player on a computer connected to the speakers and it becomes your Spotify speaker. Needs Spotify Premium."
+        >
+          {current === 'SPOTIFY' && spotify && <PlayerLink id={room.performance.id} seen={room.playback?.playerSeenAt} />}
           {!spotify && (
             <a
               href={`/api/music/connect/spotify?return=${encodeURIComponent(`/sets/${room.performance.id}`)}`}

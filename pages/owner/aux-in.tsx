@@ -10,6 +10,9 @@ import { waitForIce } from '@/lib/client/auxin';
 import { rand } from '@/lib/format';
 import { cx } from '@/lib/util';
 
+/** Audio input value for "this computer's sound" (the DJ software on the broadcasting laptop). */
+const SYSTEM_AUDIO = '__system_audio__';
+
 interface VenueAux {
   venueId: string;
   name: string;
@@ -23,7 +26,8 @@ interface VenueAux {
 
 /**
  * AUX IN broadcaster. Run this on a laptop/tablet at the venue with the mixer's line-out going into
- * a USB audio interface. It streams the speaker feed to members who are listening in.
+ * a USB audio interface — or on the DJ's own laptop with "This computer's sound", which sends
+ * exactly what the DJ software plays. It streams the live feed to members who are listening in.
  */
 const AuxInBroadcaster: AuxedPage = () => {
   const toast = useToast();
@@ -41,6 +45,7 @@ const AuxInBroadcaster: AuxedPage = () => {
   const meter = useRef<number | null>(null);
   const ice = useRef<RTCIceServer[]>([]);
   const wake = useRef<WakeLockSentinel | null>(null);
+  const stopRef = useRef<(() => void) | null>(null);
 
   const venue = data?.venues.find((v) => v.venueId === venueId) ?? data?.venues[0];
   useEffect(() => {
@@ -61,12 +66,36 @@ const AuxInBroadcaster: AuxedPage = () => {
     }
   }
 
+  /**
+   * The sound this computer is playing (DJ software, a music app), via the browser's share dialog.
+   * Browsers only share sound together with a screen/tab, so the picture is dropped straight away.
+   */
+  async function systemAudioStream() {
+    const media = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      // Chrome: offer the whole system's sound, not just one tab.
+      ...({ systemAudio: 'include', selfBrowserSurface: 'exclude' } as object),
+    } as DisplayMediaStreamOptions);
+    media.getVideoTracks().forEach((t) => {
+      t.stop();
+      media.removeTrack(t);
+    });
+    if (!media.getAudioTracks().length) throw new Error('No sound was shared. Choose "Entire screen" and tick "Share system audio", then try again.');
+    // If the person stops sharing from the browser bar, end the broadcast too.
+    media.getAudioTracks()[0].addEventListener('ended', () => stopRef.current?.());
+    return media;
+  }
+
   async function start() {
     if (!venue) return;
     try {
-      const media = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 },
-      });
+      const media =
+        deviceId === SYSTEM_AUDIO
+          ? await systemAudioStream()
+          : await navigator.mediaDevices.getUserMedia({
+              audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 },
+            });
       stream.current = media;
       startMeter(media);
       ice.current = (await api<{ iceServers: RTCIceServer[] }>('/api/auxin/ice')).iceServers;
@@ -91,7 +120,7 @@ const AuxInBroadcaster: AuxedPage = () => {
         const pc = new RTCPeerConnection({ iceServers: ice.current });
         peers.current.set(w.id, pc);
         try {
-          stream.current.getTracks().forEach((t) => pc.addTrack(t, stream.current!));
+          stream.current.getAudioTracks().forEach((t) => pc.addTrack(t, stream.current!));
           pc.onconnectionstatechange = () => {
             if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
               peers.current.delete(w.id);
@@ -147,6 +176,8 @@ const AuxInBroadcaster: AuxedPage = () => {
     setLevel(0);
     reload();
   }
+
+  stopRef.current = stop;
 
   useEffect(
     () => () => {
@@ -225,6 +256,9 @@ const AuxInBroadcaster: AuxedPage = () => {
                     <div className="mt-3 flex gap-2">
                       <select className="field appearance-none text-[13px]" value={deviceId} onChange={(e) => setDeviceId(e.target.value)} onFocus={() => !devices.length && loadDevices()}>
                         {!devices.length && <option className="bg-black">Tap to choose the audio input…</option>}
+                        <option value={SYSTEM_AUDIO} className="bg-black">
+                          This computer&apos;s sound (DJ software)
+                        </option>
                         {devices.map((d) => (
                           <option key={d.deviceId} value={d.deviceId} className="bg-black">
                             {d.label || 'Audio input'}

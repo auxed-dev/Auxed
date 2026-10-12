@@ -10,6 +10,7 @@ import { useApi } from '@/lib/client/useApi';
 import { put, errorMessage } from '@/lib/client/api';
 import { cx } from '@/lib/util';
 import type { CreativeControls, LeadTime, MicMode } from '@/lib/types';
+import { GENRE_SUGGESTIONS } from '@/lib/genres';
 
 const INTEGRATION_LABEL: Record<string, string> = {
   'apple-music': 'Apple Music',
@@ -23,7 +24,6 @@ const INTEGRATION_LABEL: Record<string, string> = {
   files: 'Files',
   'google-drive': 'Google Drive',
 };
-const GENRE_SUGGESTIONS = ['Amapiano', 'House', 'Afro House', 'Deep House', 'Hip-Hop', 'UK Rap', 'SA Rap', 'Gqom', 'R&B', 'Afrobeats', 'Techno', 'Pop', 'Dancehall', 'Kwaito', 'Jazz', 'Classical'];
 
 /** My Creative Controls: how much of the set the crowd can shape and what a request costs. Autosaves. */
 const Controls: AuxedPage = () => {

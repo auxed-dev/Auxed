@@ -1,5 +1,6 @@
 import { route, query, rateLimit, HttpError } from '@/lib/server/http';
 import { searchTracks } from '@/lib/server/music';
+import { looksLikeSongLink, resolveSongLink } from '@/lib/server/songLinks';
 
 export default route({
   async GET(ctx) {
@@ -7,6 +8,8 @@ export default route({
     const q = (query(ctx, 'q') ?? '').trim();
     if (q.length < 2) return { tracks: [] };
     try {
+      // A pasted song link from another service: find that song.
+      if (looksLikeSongLink(q)) return { tracks: await resolveSongLink(q.slice(0, 500)) };
       return { tracks: await searchTracks(q, 20) };
     } catch (err) {
       console.error('[music] search failed', err);

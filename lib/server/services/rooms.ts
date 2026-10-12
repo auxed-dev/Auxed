@@ -26,6 +26,7 @@ import { credit, debit } from './wallet';
 import { createHomeRequest, getPerformance, loadHomeRoom, requireSessionMember } from './sessions';
 import { checkSpendCap } from './nightOut';
 import { syncExternal } from './playback';
+import { checkSongClash } from './songClash';
 import { notifyNowPlaying, notifyUser } from '../push';
 
 /** Artists can open a set for requests up to this long before its slot. */
@@ -191,19 +192,7 @@ export async function createRequest(
   if (input.kind === 'SONG') {
     if (!input.track) throw bad('Pick a song to request.');
     if (exceedsMaxLength(input.track, c)) throw bad(`This artist accepts songs up to ${c.maxSongLength} minutes long.`);
-    const dup = await db
-      .select({ id: requests.id })
-      .from(requests)
-      .where(
-        and(
-          eq(requests.performanceId, perf.id),
-          inArray(requests.status, ACTIVE),
-          sql`lower(${requests.track}->>'title') = lower(${input.track.title})`,
-          sql`lower(${requests.track}->>'artist') = lower(${input.track.artist})`,
-        ),
-      )
-      .limit(1);
-    if (dup[0]) throw new HttpError(409, 'Someone already requested this one — upvote it to move it up the queue!', `DUPLICATE:${dup[0].id}`);
+    await checkSongClash(db, perf, input.track, { blockReplays: true, duplicateMessage: 'Someone already requested this one — upvote it to move it up the queue!' });
   } else {
     if (c.mic === 'NO') throw bad("This artist isn't taking On The Mic requests.");
     if (!input.message) throw bad('Write the message you want read out.');

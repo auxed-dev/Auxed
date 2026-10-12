@@ -7,7 +7,7 @@
  */
 import { and, eq, gte, isNotNull, isNull, like, notLike, or, sql } from 'drizzle-orm';
 import type { DB } from './index';
-import { earnings, events, performances, requests } from './schema';
+import { earnings, events, performances, requests, venues } from './schema';
 import { newId } from '../server/crypto';
 
 const H = 3600_000;
@@ -23,7 +23,17 @@ const ROSTERS: Record<string, { offsetH: number; performers: string[] }> = {
   v_drama: { offsetH: 2, performers: ['p_mellow', 'p_waffles', 'p_drama'] },
 };
 
+/** House sound for the sample venues (databases seeded before venues had one). */
+const SAMPLE_HOUSE_SOUND: Record<string, string[]> = {
+  v_xoyo: ['UK Rap', 'Hip-Hop', 'House'],
+  v_carpet: ['Amapiano', 'Afro House', 'Hip-Hop'],
+  v_drama: ['Amapiano', 'House', 'Afrobeats'],
+};
+
 export async function keepSampleCurrent(db: DB) {
+  for (const [id, genres] of Object.entries(SAMPLE_HOUSE_SOUND)) {
+    await db.update(venues).set({ musicGenres: genres }).where(and(eq(venues.id, id), sql`${venues.musicGenres} = '[]'::jsonb`));
+  }
   await clearEarlyStarts(db);
   const [anchor] = await db.select({ wentLiveAt: performances.wentLiveAt }).from(performances).where(eq(performances.id, ANCHOR)).limit(1);
   if (anchor?.wentLiveAt) {

@@ -4,7 +4,7 @@
  */
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { DB } from '../../db';
-import { favorites, ledger, performances, requests } from '../../db/schema';
+import { favorites, ledger, performances, requests, venues } from '../../db/schema';
 import { T } from '../../db/catalog';
 import { songPriceCents, exceedsMaxLength } from '../../pricing';
 import type { PublicControls, Suggestion, Track } from '../../types';
@@ -55,9 +55,27 @@ export async function cancelRequest(db: DB, user: AuthedUser, requestId: string)
 const key = (t: Pick<Track, 'title' | 'artist'>) => `${t.title}|${t.artist}`.toLowerCase();
 
 /**
+ * How well a genre fits tonight: the DJ's genre mix from Creative Controls (weighted), the venue's
+ * house sound, and what's playing now. Related genres count partly ("Afro House" fits "House").
+ * Songs that fit neither the DJ nor the venue are pushed down rather than hidden.
+ */
+export function genreFit(genre: string | undefined, dj: Map<string, number>, house: Set<string>, nowGenre: string | null) {
+  const g = genre?.toLowerCase().trim();
+  if (!g) return 0;
+  const related = (a: string, b: string) => a !== b && (a.includes(b) || b.includes(a));
+  let djWeight = dj.get(g) ?? 0;
+  if (!djWeight) for (const [name, w] of dj) if (related(g, name)) djWeight = Math.max(djWeight, w * 0.6);
+  const inHouse = house.has(g) || [...house].some((h) => related(g, h));
+  let fit = (djWeight / 100) * 14 + (inHouse ? 6 : 0) + (nowGenre === g ? 8 : 0);
+  if ((dj.size || house.size) && !djWeight && !inHouse && nowGenre !== g) fit -= 10;
+  return fit;
+}
+
+/**
  * Top 10 quick picks for a set: what's already in the queue (upvote), the person's saved and
- * imported favourites, what this crowd and venue request most, songs in the genre that's playing,
- * and the artist's own set list. Filtered by the artist's max song length.
+ * imported favourites, what this crowd and venue request most, the artist's own set list, and
+ * what's big in tonight's genres — all ranked by how well they fit the DJ's genre mix, the venue's
+ * house sound and what's playing. Filtered by the artist's max song length.
  */
 export async function suggestions(
   db: DB,
@@ -69,12 +87,15 @@ export async function suggestions(
   const out = new Map<string, Suggestion & { score: number }>();
   const nowKey = perf.nowPlaying ? key(perf.nowPlaying.track) : '';
   const nowGenre = perf.nowPlaying?.track.genre?.toLowerCase() ?? null;
+  const dj = new Map(controls.genres.filter((g) => g.weight > 0).map((g) => [g.name.toLowerCase(), g.weight]));
+  const venue = perf.venueId ? (await db.select({ musicGenres: venues.musicGenres }).from(venues).where(eq(venues.id, perf.venueId)).limit(1))[0] : undefined;
+  const house = new Set((venue?.musicGenres ?? []).map((g) => g.toLowerCase()));
   const priced = (t: Track) => (free ? 0 : songPriceCents(t, controls));
   const add = (t: Track | null | undefined, reason: string, score: number, requestId?: string) => {
     if (!t || !t.title || !t.artist) return;
     const k = key(t);
     if (k === nowKey || exceedsMaxLength(t, controls)) return;
-    const genreBoost = nowGenre && t.genre?.toLowerCase() === nowGenre ? 8 : 0;
+    const genreBoost = genreFit(t.genre, dj, house, nowGenre);
     const cur = out.get(k);
     if (cur) {
       cur.score += score / 2;
@@ -145,9 +166,22 @@ export async function suggestions(
       .filter((t) => t.genre?.toLowerCase() === nowGenre)
       .forEach((t) => add(t, `${perf.nowPlaying!.track.genre} · like what's playing`, 6));
   }
-  // Genres the artist plays.
-  const genres = new Set(controls.genres.map((g) => g.name.toLowerCase()));
-  if (genres.size) Object.values(T).filter((t) => t.genre && genres.has(t.genre.toLowerCase())).forEach((t) => add(t, 'Fits the vibe', 3));
+  // 5) Big right now in tonight's genres (the DJ's mix and the house sound), across AUXED.
+  const tonight = [...new Set([...dj.keys(), ...house])];
+  if (tonight.length) {
+    const big = await db
+      .select({ track: sql<Track>`(array_agg(${requests.track}))[1]`, genre: sql<string>`lower(${requests.track}->>'genre')`, n: sql<number>`count(*)` })
+      .from(requests)
+      .where(and(eq(requests.kind, 'SONG'), gt(requests.createdAt, since), sql`${requests.status} <> 'REJECTED'`, inArray(sql`lower(${requests.track}->>'genre')`, tonight)))
+      .groupBy(sql`lower(${requests.track}->>'title')`, sql`lower(${requests.track}->>'artist')`, sql`lower(${requests.track}->>'genre')`)
+      .orderBy(desc(sql`count(*)`))
+      .limit(15);
+    big.forEach((b, i) => add(b.track, `Big in ${b.track.genre ?? 'this genre'} right now`, 10 - i * 0.5));
+    // And the catalogue's songs in those genres, so a quiet night still has picks that fit.
+    Object.values(T)
+      .filter((t) => t.genre && tonight.includes(t.genre.toLowerCase()))
+      .forEach((t) => add(t, house.has(t.genre!.toLowerCase()) ? 'Fits the house sound' : 'Fits the vibe', 3));
+  }
 
   return Array.from(out.values())
     .sort((a, b) => b.score - a.score)

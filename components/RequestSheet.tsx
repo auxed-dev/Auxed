@@ -6,9 +6,10 @@ import { duration, rand } from '@/lib/format';
 import { exceedsMaxLength, micPriceCents, requestPriceCents, songPriceCents } from '@/lib/pricing';
 import { cx } from '@/lib/util';
 import type { RoomDTO, Suggestion, Track } from '@/lib/types';
+import { previewKey, stopPreview, togglePreview, usePreview } from '@/lib/client/preview';
 import { useApi } from '@/lib/client/useApi';
 import { Sheet, TabPills } from './ui';
-import { IconNote, IconSearch, IconUp } from './Icons';
+import { IconNote, IconPause, IconPlay, IconSearch, IconUp } from './Icons';
 import { TopUpSheet } from './TopUpSheet';
 import { useToast } from './Toast';
 
@@ -45,6 +46,10 @@ export function RequestSheet({
   const [topUp, setTopUp] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const { data: picks } = useApi<{ picks: Suggestion[] }>(open ? `/api/performances/${room.performance.id}/suggestions` : null);
+  useEffect(() => {
+    if (!open) stopPreview();
+    return () => stopPreview();
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -192,7 +197,7 @@ export function RequestSheet({
               <IconSearch size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50" />
               <input
                 className="field pl-11"
-                placeholder="Search songs or artists"
+                placeholder="Search songs, artists or paste a link"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 aria-label="Search songs"
@@ -349,23 +354,15 @@ function TrackRow({
   cta?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
+    <div
       className={cx(
         'flex w-full items-center gap-3 rounded-2xl p-2 pr-3 text-left transition',
         selected ? 'bg-lime/15 ring-2 ring-lime' : 'bg-white/[0.06] hover:bg-white/10',
         disabled && 'opacity-45',
       )}
     >
-      {track.artwork ? (
-        <img src={track.artwork.replace('600x600', '120x120')} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" loading="lazy" />
-      ) : (
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/50 text-white/60">
-          <IconNote size={20} />
-        </span>
-      )}
+      <PreviewCover track={track} />
+      <button type="button" onClick={onClick} disabled={disabled} className="flex min-w-0 flex-1 items-center gap-3 text-left">
       <span className="min-w-0 flex-1">
         <span className="block truncate font-din text-[14px] font-bold uppercase tracking-wide text-white">{track.title}</span>
         <span className="block truncate font-ui text-[12.5px] text-white/65">
@@ -380,6 +377,38 @@ function TrackRow({
         )}
         {note && <span className={cx('block max-w-[120px] truncate font-ui text-[10px]', noteTone === 'info' ? 'text-lime/80' : 'text-red-200')}>{note}</span>}
         {selected && <span className="block font-din text-[10px] font-bold uppercase text-lime">Selected</span>}
+      </span>
+      </button>
+    </div>
+  );
+}
+
+/** The cover doubles as a 30-second preview button, so people can check it's the right song. */
+function PreviewCover({ track }: { track: Track }) {
+  const p = usePreview();
+  const toast = useToast();
+  const on = p.key === previewKey(track);
+  return (
+    <button
+      type="button"
+      onClick={() => togglePreview(track).catch((err) => toast(errorMessage(err), 'error'))}
+      aria-label={on ? `Stop preview of ${track.title}` : `Preview ${track.title}`}
+      className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl"
+    >
+      {track.artwork ? (
+        <img src={track.artwork.replace('600x600', '120x120')} alt="" className="h-full w-full object-cover" loading="lazy" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center bg-black/50 text-white/60">
+          <IconNote size={20} />
+        </span>
+      )}
+      <span className={cx('absolute inset-0 flex items-center justify-center transition', on ? 'bg-black/55' : 'bg-black/0')}>
+        {on && !p.loading && (
+          <span className="absolute inset-[5px] rounded-full" style={{ background: `conic-gradient(#d0ff34 ${p.progress * 360}deg, rgba(255,255,255,0.18) 0)`, mask: 'radial-gradient(circle, transparent 62%, #000 64%)', WebkitMask: 'radial-gradient(circle, transparent 62%, #000 64%)' }} />
+        )}
+        <span className={cx('flex h-6 w-6 items-center justify-center rounded-full text-white', on ? '' : 'absolute bottom-1 right-1 h-5 w-5 bg-black/60')}>
+          {on ? p.loading ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <IconPause size={12} /> : <IconPlay size={10} className="translate-x-[1px]" />}
+        </span>
       </span>
     </button>
   );

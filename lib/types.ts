@@ -40,6 +40,8 @@ export interface Track {
   previewUrl?: string;
   source: 'itunes' | 'spotify' | 'catalog';
   externalId?: string;
+  /** International Standard Recording Code: the same recording on every service. */
+  isrc?: string;
 }
 
 export interface NowPlaying {
@@ -70,12 +72,14 @@ export type StoryKind = 'SET' | 'REQUEST' | 'PHOTO' | 'TEXT';
 
 /** Where a set's approved requests are auto-queued. */
 export interface PlaybackTarget {
-  /** SPOTIFY = the owner's Spotify account (queues on their active device);
-   *  APPLE_MUSIC / YOUTUBE = an AUXED Player screen signed in on the venue/host device. */
+  /** SPOTIFY = the owner's Spotify account (queues on their active device, or the AUXED Player
+   *  becomes the Spotify speaker); APPLE_MUSIC / YOUTUBE = an AUXED Player screen on the speaker device. */
   provider: 'SPOTIFY' | 'APPLE_MUSIC' | 'YOUTUBE';
   ownerUserId: string;
-  /** Player heartbeat (APPLE_MUSIC / YOUTUBE). */
+  /** AUXED Player heartbeat. */
   playerSeenAt?: string | null;
+  /** SPOTIFY: the AUXED Player's own Spotify Connect device, when the player is the speaker. */
+  deviceId?: string | null;
   lastError?: string | null;
 }
 
@@ -137,6 +141,8 @@ export interface VenueDTO {
   waitMinutes: number | null;
   artistSharePct: number;
   safetyPhone: string | null;
+  /** House sound: genres the venue wants played. */
+  musicGenres: string[];
 }
 
 export interface PerformerDTO {

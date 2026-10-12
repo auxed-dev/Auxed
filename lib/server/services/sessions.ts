@@ -21,6 +21,7 @@ import { newId } from '../crypto';
 import { HttpError, bad, forbidden, notFound, unauthorized } from '../http';
 import type { AuthedUser } from '../session';
 import { perfStatus, postDTOs, recentPosts, requestDTOs, userBrief, type PerformanceRow, type UserRow } from './core';
+import { checkSongClash } from './songClash';
 
 export const DEFAULT_HOME: HomeSettings = { approval: 'AUTO', perGuestLimit: 3, source: null };
 const ACTIVE = ['PENDING', 'QUEUED', 'PLAYING'] as const;
@@ -141,6 +142,7 @@ function homeVenue(p: PerformanceRow, host: UserRow, members: number): VenueDTO 
     waitMinutes: null,
     artistSharePct: 0,
     safetyPhone: null,
+    musicGenres: [],
   };
 }
 
@@ -246,19 +248,8 @@ export async function createHomeRequest(db: DB, user: AuthedUser, perf: Performa
       .where(and(eq(requests.performanceId, perf.id), eq(requests.userId, user.id), inArray(requests.status, ['PENDING', 'QUEUED'])));
     if (Number(n) >= s.perGuestLimit) throw new HttpError(409, `You can have ${s.perGuestLimit} songs waiting at a time.`, 'CLOSED');
   }
-  const dup = await db
-    .select({ id: requests.id })
-    .from(requests)
-    .where(
-      and(
-        eq(requests.performanceId, perf.id),
-        inArray(requests.status, [...ACTIVE]),
-        sql`lower(${requests.track}->>'title') = lower(${track.title})`,
-        sql`lower(${requests.track}->>'artist') = lower(${track.artist})`,
-      ),
-    )
-    .limit(1);
-  if (dup[0]) throw new HttpError(409, "That one's already in the queue — upvote it instead!", `DUPLICATE:${dup[0].id}`);
+  // Friends at home can replay a favourite; only waiting duplicates and the song on now are caught.
+  await checkSongClash(db, perf, track, { blockReplays: false, duplicateMessage: "That one's already in the queue — upvote it instead!" });
   const auto = isHost || s.approval === 'AUTO';
   const id = newId();
   await db.insert(requests).values({

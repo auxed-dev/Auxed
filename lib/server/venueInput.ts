@@ -1,5 +1,6 @@
 import type { venues } from '../db/schema';
-import { num, oneOf, safeUrl, str } from './http';
+import { bad, num, oneOf, safeUrl, str } from './http';
+import { MAX_HOUSE_GENRES } from '../genres';
 
 type VenueInsert = typeof venues.$inferInsert;
 
@@ -28,5 +29,11 @@ export function venueInput(b: Record<string, unknown>, partial = false): Partial
     out.safetyPhone = phone ? phone.replace(/[^\d+]/g, '') : null;
   }
   if (b.artistSharePct !== undefined) out.artistSharePct = num(b.artistSharePct, 'Artist share', { min: 0, max: 100, int: true });
+  if (b.musicGenres !== undefined) {
+    if (!Array.isArray(b.musicGenres)) throw bad('House sound must be a list of genres.');
+    const genres = [...new Set(b.musicGenres.map((g) => str(g, 'Genre', { max: 30 })))];
+    if (genres.length > MAX_HOUSE_GENRES) throw bad(`Pick up to ${MAX_HOUSE_GENRES} genres for the house sound.`);
+    out.musicGenres = genres;
+  }
   return out;
 }

@@ -32,6 +32,8 @@ Sample accounts (password `Auxed!2026`):
 
 In development, wallet top-ups credit instantly (no real payment) and emails (verification, password reset) are printed in the server log.
 
+To try a night out end to end in development: `POST /api/dev/test-night` puts the DJ account **JackBoy** live at **The Carpet Shop** with AUX IN on (member code `CARPET-VIP`). Open `/owner/aux-in` as `owner@auxed.app`, choose **This computer's sound** and play music on that computer; listen in from another browser as an AUXee.
+
 Useful scripts:
 
 | Script | What it does |
@@ -49,8 +51,12 @@ Useful scripts:
 - **PASS THE AUX** — private listening sessions (home, car, braai). Start one under the **+** menu, friends join with a code / QR / link, everyone adds songs (free), votes and chats. Hosts choose who can join, approve songs or not, and a per-guest limit, and can share the session to the Wire Room.
 - **Night-out guardrails** — press-and-hold to request, 30-second undo (full refund), a spending limit per 12 hours, and quick picks tailored to what's playing, what this crowd requests and your favourites.
 - **Lock-screen card** — "now playing" with 🔥 / 🙌 / Request: web push on Android and iPhone home-screen apps; iOS Live Activity / Android ongoing notification in the native build (`native/`).
-- **Auto-queue** — artists, venues and hosts can send approved requests to their **Spotify** (queued on the active device) or to the **AUXED Player** (`/player/:id`) playing through **Apple Music** or **YouTube** on the speaker device. AUXED keeps the vote order and follows what's actually playing.
-- **AUX IN** — venues stream their speaker feed to members' earphones (WebRTC). Members get in with a **Day Pass**, the monthly **AUX Pass** or the venue's **member code**; listening only works on site. The broadcaster runs at `/owner/aux-in`.
+- **Auto-queue** — artists, venues and hosts can send approved requests to their **Spotify** (queued on the active device) or to the **AUXED Player** (`/player/:id`) on the speaker device, which plays through **Spotify** (it becomes a Spotify Connect speaker — Premium, desktop browser), **Apple Music** or **YouTube**. AUXED keeps the vote order, shows who requested each song, and follows what's actually playing.
+- **AUX IN** — venues stream exactly what's on their speakers to members' earphones (WebRTC, about half a second behind): the mixer's line-out through a USB audio interface, or **This computer's sound** on the DJ's laptop. Members get in with a **Day Pass**, the monthly **AUX Pass** or the venue's **member code**; listening only works on site. Each listener can rewind on their own phone — back to the start of a song, to earlier songs since they tuned in, forward, and **Live** — without affecting anyone else. The broadcaster runs at `/owner/aux-in`.
+- **Song previews** — tap a song's cover while choosing a request to hear 30 seconds (AUX IN dips meanwhile).
+- **Quick picks that fit the night** — suggestions are ranked by the DJ's genre mix (Creative Controls), the venue's **house sound** (venue settings), what's playing, the queue, the person's favourites, and what's big in those genres on AUXED.
+- **Request by link** — paste a song link from Spotify, Apple Music, YouTube / YouTube Music, SoundCloud or Deezer into the request search.
+- **Song matching** — every lookup (Spotify, Apple Music, YouTube, previews, duplicates) matches the same recording: ISRC first, then title/artist/length, never a live/remix/cover stand-in. Ported from [SongMirror](https://github.com/ahnafnafee/songmirror) (MIT).
 - **Treasure Box** — saved songs and sets, things friends sent you, favourites imported from Spotify / Apple Music, and your On The Mic moments.
 
 Licensing: personal music accounts are for personal use. Venues need business music licences (SAMRO, SAMPRA, CAPASSO) before using auto-queue or AUX IN commercially.

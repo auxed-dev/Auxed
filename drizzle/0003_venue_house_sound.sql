@@ -1,0 +1,1 @@
+ALTER TABLE "venues" ADD COLUMN "music_genres" jsonb DEFAULT '[]'::jsonb NOT NULL;

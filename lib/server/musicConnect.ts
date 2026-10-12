@@ -7,6 +7,8 @@
  *  - Apple Music: MusicKit on the web. The server only mints the developer token
  *    (APPLE_MUSIC_TEAM_ID / APPLE_MUSIC_KEY_ID / APPLE_MUSIC_PRIVATE_KEY); the person signs in on their
  *    own device and the browser imports their favourites.
+ *    With the `streaming` scope the AUXED Player itself becomes a Spotify Connect speaker
+ *    (Spotify's Web Playback SDK, Premium, desktop browsers).
  *  - YouTube: search only (YOUTUBE_API_KEY), used by the AUXED Player.
  */
 import { createHash, createPrivateKey, sign } from 'crypto';
@@ -15,6 +17,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import type { DB } from '../db';
 import { favorites, musicConnections, trackLinks } from '../db/schema';
 import type { Track } from '../types';
+import { bestMatch, normalizeIsrc, scoreVideo } from '../matching';
 import { decryptSecret, encryptSecret, newId, token } from './crypto';
 import { HttpError, appUrl } from './http';
 import { appendCookie } from './session';
@@ -26,6 +29,10 @@ const SPOTIFY_SCOPES = [
   'user-top-read',
   'user-read-recently-played',
   'user-library-read',
+  // Web Playback SDK: lets the AUXED Player play on this account.
+  'streaming',
+  'user-read-email',
+  'user-read-private',
 ].join(' ');
 const STATE_COOKIE = 'auxed_music';
 
@@ -113,6 +120,17 @@ export async function spotifyAccess(db: DB, userId: string): Promise<string | nu
   return t.access_token;
 }
 
+/** An access token for the AUXED Player's Spotify speaker (the person's own account, `streaming` scope). */
+export async function spotifyPlayerToken(db: DB, userId: string) {
+  const c = (await db.select({ scope: musicConnections.scope }).from(musicConnections).where(and(eq(musicConnections.userId, userId), eq(musicConnections.provider, 'SPOTIFY'))).limit(1))[0];
+  if (!c) throw new HttpError(409, 'Connect your Spotify account on this login first.', 'CONNECT_SPOTIFY');
+  if (!c.scope?.split(' ').includes('streaming')) throw new HttpError(409, 'Reconnect Spotify so the AUXED Player can play on your account.', 'RECONNECT_SPOTIFY');
+  const accessToken = await spotifyAccess(db, userId);
+  if (!accessToken) throw new HttpError(409, 'The Spotify connection has expired — reconnect it.', 'RECONNECT_SPOTIFY');
+  const row = (await db.select({ expiresAt: musicConnections.expiresAt }).from(musicConnections).where(and(eq(musicConnections.userId, userId), eq(musicConnections.provider, 'SPOTIFY'))).limit(1))[0];
+  return { accessToken, expiresAt: (row?.expiresAt ?? new Date(Date.now() + 30 * 60_000)).toISOString() };
+}
+
 interface SpotifyTrack {
   uri: string;
   name: string;
@@ -125,7 +143,16 @@ interface SpotifyTrack {
 
 export function fromSpotify(t: SpotifyTrack): Track {
   const img = [...(t.album.images ?? [])].sort((a, b) => b.width - a.width)[0]?.url;
-  return { title: t.name, artist: t.artists.map((a) => a.name).join(', '), album: t.album.name, artwork: img, durationSec: Math.round(t.duration_ms / 1000), source: 'spotify', externalId: t.id };
+  return {
+    title: t.name,
+    artist: t.artists.map((a) => a.name).join(', '),
+    album: t.album.name,
+    artwork: img,
+    durationSec: Math.round(t.duration_ms / 1000),
+    source: 'spotify',
+    externalId: t.id,
+    isrc: t.external_ids?.isrc ? normalizeIsrc(t.external_ids.isrc) : undefined,
+  };
 }
 
 async function spotifyGet<T>(accessToken: string, path: string): Promise<T> {
@@ -165,16 +192,25 @@ export async function replaceImported(db: DB, userId: string, source: 'SPOTIFY' 
 
 const linkKey = (t: Pick<Track, 'title' | 'artist'>) => `${t.title}|${t.artist}`.toLowerCase().slice(0, 300);
 
-/** Find a track's Spotify URI (cached). */
+/**
+ * Find a track's Spotify URI (cached): the ISRC when we have it, otherwise the best search result
+ * that is safely the same recording (never a live/remix/cover stand-in).
+ */
 export async function spotifyUriFor(db: DB, accessToken: string, t: Track): Promise<string | null> {
   if (t.source === 'spotify' && t.externalId) return `spotify:track:${t.externalId}`;
   const key = linkKey(t);
   const hit = (await db.select().from(trackLinks).where(eq(trackLinks.key, key)).limit(1))[0];
   if (hit?.spotifyUri) return hit.spotifyUri;
-  const firstArtist = t.artist.split(/,|&| feat\.| ft\./i)[0].trim();
-  const q = `track:${t.title.replace(/\(.*?\)|\[.*?\]/g, '').trim()} artist:${firstArtist}`;
-  const r = await spotifyGet<{ tracks: { items: SpotifyTrack[] } }>(accessToken, `/search?type=track&limit=1&q=${encodeURIComponent(q)}`);
-  const uri = r.tracks.items[0]?.uri ?? null;
+  const wanted = { title: t.title, artist: t.artist, durationMs: t.durationSec * 1000 };
+  const describe = (s: SpotifyTrack) => ({ title: s.name, artist: s.artists.map((a) => a.name), durationMs: s.duration_ms });
+  const search = async (q: string) => (await spotifyGet<{ tracks: { items: SpotifyTrack[] } }>(accessToken, `/search?type=track&limit=8&q=${encodeURIComponent(q)}`)).tracks.items;
+  let found: SpotifyTrack | null = null;
+  if (t.isrc) found = (await search(`isrc:${t.isrc}`))[0] ?? null;
+  const firstArtist = t.artist.split(/,|&| feat\.| ft\.| x /i)[0].trim();
+  const title = t.title.replace(/\(.*?\)|\[.*?\]/g, '').trim();
+  if (!found) found = bestMatch(wanted, await search(`track:${title} artist:${firstArtist}`), describe);
+  if (!found) found = bestMatch(wanted, await search(`${title} ${firstArtist}`), describe);
+  const uri = found?.uri ?? null;
   if (uri) await db.insert(trackLinks).values({ key, spotifyUri: uri }).onConflictDoUpdate({ target: trackLinks.key, set: { spotifyUri: uri, updatedAt: new Date() } });
   return uri;
 }
@@ -221,19 +257,42 @@ export function appleMusicDeveloperToken(): string {
 
 /* ----------------------------------------------------------------------------- YouTube */
 
-/** Best embeddable YouTube video for a track (cached). */
+const isoSeconds = (d: string) => {
+  const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d) ?? [];
+  return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+};
+
+/**
+ * Best embeddable YouTube video for a track (cached): the official upload or the artist's
+ * "Topic" audio whose length matches — not a live, sped-up, karaoke or cover video.
+ */
 export async function youtubeIdFor(db: DB, t: Track): Promise<string | null> {
   const key = linkKey(t);
   const hit = (await db.select().from(trackLinks).where(eq(trackLinks.key, key)).limit(1))[0];
   if (hit?.youtubeId) return hit.youtubeId;
   if (!youtubeEnabled()) return null;
-  const q = `${t.artist} ${t.title} official audio`;
+  const apiKey = process.env.YOUTUBE_API_KEY!;
   const r = await fetch(
-    `https://www.googleapis.com/youtube/v3/search?${new URLSearchParams({ part: 'snippet', type: 'video', videoEmbeddable: 'true', videoCategoryId: '10', maxResults: '1', q, key: process.env.YOUTUBE_API_KEY! })}`,
+    `https://www.googleapis.com/youtube/v3/search?${new URLSearchParams({ part: 'snippet', type: 'video', videoEmbeddable: 'true', videoCategoryId: '10', maxResults: '8', q: `${t.artist} ${t.title}`, key: apiKey })}`,
   );
   if (!r.ok) return null;
   const j = (await r.json()) as { items?: { id: { videoId: string } }[] };
-  const id = j.items?.[0]?.id.videoId ?? null;
+  const ids = (j.items ?? []).map((i) => i.id.videoId).filter(Boolean);
+  if (!ids.length) return null;
+  // Lengths and titles in one cheap call, so the match can use duration too.
+  const v = await fetch(`https://www.googleapis.com/youtube/v3/videos?${new URLSearchParams({ part: 'snippet,contentDetails', id: ids.join(','), key: apiKey })}`);
+  if (!v.ok) return null;
+  const vj = (await v.json()) as { items?: { id: string; snippet: { title: string; channelTitle: string }; contentDetails: { duration: string } }[] };
+  const wanted = { title: t.title, artist: t.artist, durationMs: t.durationSec * 1000 };
+  let id: string | null = null;
+  let top = 0;
+  for (const it of vj.items ?? []) {
+    const s = scoreVideo(wanted, { title: it.snippet.title, channel: it.snippet.channelTitle, durationMs: isoSeconds(it.contentDetails.duration) * 1000 });
+    if (s.ok && s.score > top) {
+      top = s.score;
+      id = it.id;
+    }
+  }
   if (id) await db.insert(trackLinks).values({ key, youtubeId: id }).onConflictDoUpdate({ target: trackLinks.key, set: { youtubeId: id, updatedAt: new Date() } });
   return id;
 }

@@ -95,6 +95,7 @@ export function venueDTO(v: VenueRow): VenueDTO {
     waitMinutes: v.waitMinutes,
     artistSharePct: v.artistSharePct,
     safetyPhone: v.safetyPhone,
+    musicGenres: v.musicGenres ?? [],
   };
 }
 
