@@ -42,7 +42,7 @@ export function WireRow({ p, onReply, meId }: { p: PostDTO; onReply?: () => void
   const meta = p.label ?? (p.to ? `${toMe ? 'To You' : `To ${p.to.userName}`} On The Mic` : null);
   return (
     <li
-      className={cx('flex items-center gap-3 px-2 py-1.5', highlight && 'rounded-full py-2 pl-2 pr-5')}
+      className={cx('flex items-center gap-[10px] px-2 py-[5px]', highlight && 'rounded-full py-[4px] pl-[4px] pr-5')}
       style={
         highlight === 'blue'
           ? { background: 'linear-gradient(90deg,#4248ad,#4c52b8)', boxShadow: '0 0 16px rgba(70,80,190,0.5)' }
@@ -52,21 +52,21 @@ export function WireRow({ p, onReply, meId }: { p: PostDTO; onReply?: () => void
       }
     >
       {highlight === 'blue' ? (
-        <span className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#111] shadow-[0_0_0_2px_#000]">
-          <LogoA size={30} />
+        <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#111] shadow-[0_0_0_2px_#000]">
+          <LogoA size={25} />
         </span>
       ) : (
-        <Avatar src={p.author.avatarUrl} name={p.author.userName} size={50} ring={p.author.ring} />
+        <Avatar src={p.author.avatarUrl} name={p.author.userName} size={42} ring={p.author.ring} />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate font-ui text-[13px] font-semibold tracking-wide text-white">{p.author.userName}</span>
+          <span className="truncate font-ui text-[11px] font-semibold tracking-wide text-white">{p.author.userName}</span>
           {meta ? <MicMeta label={meta} /> : p.nowPlaying ? <NowPlayingMeta text={p.nowPlaying} /> : <span className="shrink-0 font-din text-[9.5px] text-white/50">{timeAgo(p.createdAt)}</span>}
         </div>
         <div className="flex items-center justify-between gap-2">
-          <p className={cx('min-w-0 truncate font-ui text-[13px] tracking-wide text-white/90', highlight && 'font-bold text-white')}>{highlight || p.kind === 'MIC' ? `“${p.text}”` : p.text}</p>
+          <p className={cx('min-w-0 truncate font-ui text-[10.5px] tracking-wide text-white/90', highlight && 'font-bold text-white')}>{highlight || p.kind === 'MIC' ? `“${p.text}”` : p.text}</p>
           {p.to && p.author.id !== meId && onReply && (
-            <button type="button" onClick={onReply} className="shrink-0 font-din text-[11px] font-bold text-white">
+            <button type="button" onClick={onReply} className="shrink-0 font-din text-[9.5px] font-bold text-white">
               Private Reply
             </button>
           )}
@@ -84,19 +84,19 @@ export function FeaturedPost({ p, onLike }: { p: PostDTO; onLike: () => void }) 
     <section className="mt-6 px-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Avatar src={p.author.avatarUrl} name={p.author.userName} size={50} ring={p.author.ring} />
-          <span className="font-ui text-[13px] font-semibold tracking-wide text-white">{p.author.userName}</span>
+          <Avatar src={p.author.avatarUrl} name={p.author.userName} size={42} ring={p.author.ring} />
+          <span className="font-ui text-[11px] font-semibold tracking-wide text-white">{p.author.userName}</span>
         </div>
         {p.nowPlaying && <NowPlayingMeta text={p.nowPlaying} />}
       </div>
       <div className="mt-1 flex gap-3">
-        <div className="w-[44%] pt-8">
-          <p className="font-ui text-[13px] font-bold tracking-wide text-white">{p.label ?? (p.kind === 'MIC' ? 'On The Mic' : 'Live Snippet')}</p>
-          <p className="mt-2 font-ui text-[11px] text-white/85">“{p.text}”</p>
-          {p.caption && <p className="mt-5 font-ui text-[9px] leading-[1.6] text-white/80">{p.caption}</p>}
+        <div className="w-[40%] pt-7">
+          <p className="font-ui text-[11px] font-bold tracking-wide text-white">{p.label ?? (p.kind === 'MIC' ? 'On The Mic' : 'Live Snippet')}</p>
+          <p className="mt-2 font-ui text-[9.5px] text-white/85">“{p.text}”</p>
+          {p.caption && <p className="mt-4 font-ui text-[8px] leading-[1.6] text-white/80">{p.caption}</p>}
         </div>
         <div className="relative flex-1">
-          <img src={p.imageUrl!} alt="" className="h-[192px] w-full rounded-[24px] object-cover" />
+          <img src={p.imageUrl!} alt="" className="h-[150px] w-full rounded-[22px] object-cover" />
           <button type="button" onClick={onLike} aria-label={p.liked ? 'Unlike' : 'Like'} className={cx('absolute -left-3 -top-3 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)] transition active:scale-125', p.liked ? 'text-red-500' : 'text-[#ff2d3d]')}>
             <IconHeart size={40} />
           </button>

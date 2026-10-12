@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuxedPage } from './_app';
 import { Screen } from '@/components/Screen';
 import { LogoA } from '@/components/Brand';
@@ -36,6 +36,7 @@ const Wire: AuxedPage = () => {
   const theme = themeFor(user?.role);
   const management = router.query.filter === 'management';
   const [here, setHere] = useState<Here | null>(null);
+  const scrolledToChat = useRef(false);
   const [locState, setLocState] = useState<'unknown' | 'granted' | 'prompt' | 'denied' | 'unsupported'>('unknown');
   const [forceFeed, setForceFeed] = useState(false);
   const venueMode = !!here && !forceFeed && !management;
@@ -89,6 +90,15 @@ const Wire: AuxedPage = () => {
   }, [data, older]);
   const featured = all.find((p) => (p.kind === 'MIC' || p.kind === 'SNIPPET') && p.imageUrl);
   const rest = all.filter((p) => p !== featured);
+  // Venue chat reads like a chat: oldest first, newest just above the comment bar.
+  const chat = useMemo(() => [...rest].reverse(), [rest]);
+  const newest = chat[chat.length - 1]?.id;
+  useEffect(() => {
+    if (!venueMode || !newest) return;
+    const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 260;
+    if (nearBottom || !scrolledToChat.current) window.scrollTo({ top: document.body.scrollHeight, behavior: scrolledToChat.current ? 'smooth' : 'auto' });
+    scrolledToChat.current = true;
+  }, [venueMode, newest]);
 
   async function send(text: string) {
     try {
@@ -166,7 +176,7 @@ const Wire: AuxedPage = () => {
           {featured && <FeaturedPost p={featured} onLike={() => like(featured)} />}
           <ul className="mt-5 flex flex-col gap-[10px] px-3">
             {!data && [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[62px]" />)}
-            {rest.map((p) => (
+            {chat.map((p) => (
               <WireRow key={p.id} p={p} onReply={() => setReplyTo(p.author)} meId={user?.id} />
             ))}
             {data && all.length === 0 && <p className="py-10 text-center font-ui text-sm text-white/60">Be the first to say something in {here!.venue.chatLabel.toLowerCase()}.</p>}

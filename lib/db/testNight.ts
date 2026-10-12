@@ -5,7 +5,7 @@
  */
 import { and, eq, like } from 'drizzle-orm';
 import type { DB } from './index';
-import { earnings, performances, performers, requests, users, venues } from './schema';
+import { earnings, performances, performers, posts, requests, users, venues } from './schema';
 import { T } from './catalog';
 import { IMG } from './media';
 import { songPriceCents } from '../pricing';
@@ -37,9 +37,10 @@ export async function setUpTestNight(db: DB, djName = 'JackBoy', venueId = 'v_ca
   const timing = { startsAt: new Date(now - 30 * 60_000), endsAt: new Date(now + 6 * H), wentLiveAt: new Date(now - 30 * 60_000) };
   let id = mine?.id;
   if (id) {
+    const [existing] = await db.select({ playback: performances.playback }).from(performances).where(eq(performances.id, id)).limit(1);
     await db
       .update(performances)
-      .set({ ...timing, setlist, nowPlaying: { track: setlist[0], startedAt: new Date(now - 40_000).toISOString() } })
+      .set({ ...timing, setlist, ...(existing?.playback ? {} : { nowPlaying: { track: setlist[0], startedAt: new Date(now - 40_000).toISOString() } }) })
       .where(eq(performances.id, id));
   } else {
     id = newId();
@@ -74,5 +75,22 @@ export async function setUpTestNight(db: DB, djName = 'JackBoy', venueId = 'v_ca
       }
     }
   }
+  await seedClubChat(db, id, now);
   return { ok: true as const, performanceId: id, url: `/sets/${id}`, venue: v.name, memberCode: v.auxInMemberCode ?? MEMBER_CODE };
+}
+
+/** A lively club chat for the test set (only when it has none): what the Wire Room looks like at a venue. */
+async function seedClubChat(db: DB, performanceId: string, now: number) {
+  const [has] = await db.select({ id: posts.id }).from(posts).where(eq(posts.performanceId, performanceId)).limit(1);
+  if (has) return;
+  const ago = (min: number) => new Date(now - min * 60_000);
+  await db.insert(posts).values([
+    { id: newId(), authorId: 'u_auxee', kind: 'MIC', performanceId, label: 'Special On The Mic', text: 'You are my favorite Daniel!', caption: 'We watch the sun set on our honeymoon, while this played in the background!', imageUrl: IMG.selfie, nowPlaying: 'Photograph by Ed Sheeran', likesBase: 1, createdAt: ago(22) },
+    { id: newId(), authorId: 'u_wire', kind: 'SYSTEM', performanceId, label: 'RodnyVinyl On The Mic', text: 'Jackie has a crush on Jill!', createdAt: ago(18) },
+    { id: newId(), authorId: 'u_tempo', kind: 'CHAT', performanceId, text: 'DJJJJJJ!', nowPlaying: 'Mnike (feat. DJ Maphorisa, Nandipha808, Ceeka RSA & Tyron Dee)', createdAt: ago(15) },
+    { id: newId(), authorId: 'u_jackie', kind: 'CHAT', performanceId, text: 'Funny guys, wow.', toUserId: 'u_rodny', label: 'To RodnyVinyl On The Mic', createdAt: ago(12) },
+    { id: newId(), authorId: 'u_dave', kind: 'CHAT', performanceId, text: 'This is a throwback and a half!', nowPlaying: 'Water', createdAt: ago(9) },
+    { id: newId(), authorId: 'u_vicky', kind: 'CHAT', performanceId, text: "We've been telling this guy to drop, wow.", nowPlaying: 'Sirens', createdAt: ago(6) },
+    { id: newId(), authorId: 'u_owner', kind: 'MANAGEMENT', performanceId, label: 'Section 7 On The Mic', text: 'Shout out my boy David!', createdAt: ago(3) },
+  ]);
 }
