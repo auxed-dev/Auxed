@@ -38,7 +38,7 @@ export interface Track {
   durationSec: number;
   genre?: string;
   previewUrl?: string;
-  source: 'itunes' | 'spotify' | 'catalog';
+  source: 'itunes' | 'spotify' | 'deezer' | 'youtube' | 'catalog';
   externalId?: string;
   /** International Standard Recording Code: the same recording on every service. */
   isrc?: string;

@@ -159,6 +159,10 @@ export function RequestSheet({
     }
   }
 
+  // Songs over the artist's length limit can't be requested, so they're left out of the results.
+  const fitting = results.filter((t) => !exceedsMaxLength(t, c));
+  const longer = results.length - fitting.length;
+
   return (
     <>
       <Sheet open={open && !topUp} onClose={onClose} title={free ? 'Add to the queue' : kind === 'SONG' ? 'Make a request' : 'On The Mic'}>
@@ -226,23 +230,17 @@ export function RequestSheet({
                 </>
               )}
               {searching && <p className="py-3 text-center font-ui text-[13px] text-white/50">Searching…</p>}
-              {!searching && q.trim().length >= 2 && results.length === 0 && <p className="py-3 text-center font-ui text-[13px] text-white/50">No songs found.</p>}
-              {results
+              {!searching && q.trim().length >= 2 && fitting.length === 0 && longer === 0 && <p className="py-3 text-center font-ui text-[13px] text-white/50">No songs found.</p>}
+              {fitting
                 .filter((t) => !picked || t.externalId !== picked.externalId)
-                .map((t) => {
-                  const tooLong = exceedsMaxLength(t, c);
-                  return (
-                    <TrackRow
-                      key={`${t.source}-${t.externalId ?? t.title}`}
-                      track={t}
-                      price={free ? 0 : songPriceCents(t, c)}
-                      free={free}
-                      disabled={tooLong}
-                      note={tooLong ? `Over ${c.maxSongLength} min` : undefined}
-                      onClick={() => !tooLong && setPicked(t)}
-                    />
-                  );
-                })}
+                .map((t) => (
+                  <TrackRow key={`${t.source}-${t.externalId ?? t.title}`} track={t} price={free ? 0 : songPriceCents(t, c)} free={free} onClick={() => setPicked(t)} />
+                ))}
+              {!searching && longer > 0 && (
+                <p className="px-1 py-2 text-center font-ui text-[11.5px] text-white/45">
+                  {longer} longer {longer === 1 ? 'version' : 'versions'} hidden — {free ? 'this session takes' : `${room.performance.performer.name} takes`} songs up to {c.maxSongLength} min.
+                </p>
+              )}
             </div>
           </>
         )}

@@ -7,7 +7,9 @@
  */
 import { and, eq, gte, isNotNull, isNull, like, notLike, or, sql } from 'drizzle-orm';
 import type { DB } from './index';
-import { earnings, events, performances, requests, venues } from './schema';
+import { earnings, events, favorites, performances, requests, venues } from './schema';
+import { T } from './catalog';
+import type { Track } from '../types';
 import { newId } from '../server/crypto';
 
 const H = 3600_000;
@@ -30,7 +32,35 @@ const SAMPLE_HOUSE_SOUND: Record<string, string[]> = {
   v_drama: ['Amapiano', 'House', 'Afrobeats'],
 };
 
+/**
+ * Sample songs that pointed at the wrong recording (a remix, a live take, a radio edit) before the
+ * catalogue was audited — old Apple id -> the original. Copies already in the database are repaired.
+ */
+const TRACK_FIXES: Record<string, Track> = { '6798959879': T.walking, '1433879362': T.drive, '1784251613': T.photograph };
+
+async function repairSampleTracks(db: DB) {
+  for (const [oldId, track] of Object.entries(TRACK_FIXES)) {
+    const json = sql`${JSON.stringify(track)}::jsonb`;
+    await db.update(requests).set({ track: json as unknown as Track }).where(sql`${requests.track}->>'externalId' = ${oldId}`);
+    await db.update(favorites).set({ track: json as unknown as Track }).where(sql`${favorites.track}->>'externalId' = ${oldId}`);
+    const sets = await db
+      .select({ id: performances.id, setlist: performances.setlist, nowPlaying: performances.nowPlaying })
+      .from(performances)
+      .where(sql`${performances.setlist}::text like ${'%' + oldId + '%'} or ${performances.nowPlaying}::text like ${'%' + oldId + '%'}`);
+    for (const p of sets) {
+      await db
+        .update(performances)
+        .set({
+          setlist: p.setlist.map((t) => (t.externalId === oldId ? track : t)),
+          nowPlaying: p.nowPlaying?.track.externalId === oldId ? { ...p.nowPlaying, track } : p.nowPlaying,
+        })
+        .where(eq(performances.id, p.id));
+    }
+  }
+}
+
 export async function keepSampleCurrent(db: DB) {
+  await repairSampleTracks(db);
   for (const [id, genres] of Object.entries(SAMPLE_HOUSE_SOUND)) {
     await db.update(venues).set({ musicGenres: genres }).where(and(eq(venues.id, id), sql`${venues.musicGenres} = '[]'::jsonb`));
   }

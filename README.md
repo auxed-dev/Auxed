@@ -10,7 +10,7 @@ It's a mobile-first **installable web app (PWA)**: open it from a QR code at the
 - **Postgres** via **Drizzle ORM** (migrations in `./drizzle`). Local development uses an embedded Postgres (PGlite), so there's nothing to install.
 - Email + password auth (scrypt, server-side sessions, CSRF header), optional Google / Apple sign-in, email verification and password reset
 - **Token wallet** = in-app tokens (1 token = R1) topped up by card through **Paystack** or **Stripe** hosted checkout, with signed webhooks. No crypto.
-- Song search: iTunes Search API (no key) or Spotify
+- Song search across iTunes / Apple Music (local + US store), Deezer, Spotify (with keys) and YouTube Music (with a key, as a fallback) — merged, originals first
 - Maps: Leaflet
 
 ## Run it locally
@@ -58,6 +58,8 @@ Useful scripts:
 - **Request by link** — paste a song link from Spotify, Apple Music, YouTube / YouTube Music, SoundCloud or Deezer into the request search.
 - **Song matching** — every lookup (Spotify, Apple Music, YouTube, previews, duplicates) matches the same recording: ISRC first, then title/artist/length, never a live/remix/cover stand-in. Ported from [SongMirror](https://github.com/ahnafnafee/songmirror) (MIT).
 - **Treasure Box** — saved songs and sets, things friends sent you, favourites imported from Spotify / Apple Music, and your On The Mic moments.
+
+Song search uses Deezer's free public API by default (set `DEEZER_SEARCH=off` to disable). Deezer asks businesses to contact it for a partnership before commercial use — arrange that before launch.
 
 Licensing: personal music accounts are for personal use. Venues need business music licences (SAMRO, SAMPRA, CAPASSO) before using auto-queue or AUX IN commercially.
 

@@ -46,26 +46,33 @@ export async function togglePreview(track: Track) {
   if (state.key === key) return stopPreview();
   stopPreview();
   set({ key, loading: true, progress: 0 });
-  let url = track.previewUrl;
-  if (!url) {
+  const lookUp = async () => {
     const q = new URLSearchParams({ title: track.title, artist: track.artist, duration: String(track.durationSec) });
-    url = (await api<{ previewUrl: string | null }>(`/api/music/preview?${q}`).catch(() => null))?.previewUrl ?? undefined;
-  }
+    return (await api<{ previewUrl: string | null }>(`/api/music/preview?${q}`).catch(() => null))?.previewUrl ?? undefined;
+  };
+  const tryPlay = async (url: string) => {
+    const el = new Audio(url);
+    audio = el;
+    el.ontimeupdate = () => audio === el && set({ key, loading: false, progress: el.currentTime / (Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 30) });
+    el.onended = () => audio === el && stopPreview();
+    await el.play();
+    if (audio === el) set({ key, loading: false, progress: 0 });
+  };
+  let url = track.previewUrl ?? (await lookUp());
   if (state.key !== key) return; // another preview was tapped meanwhile
   if (!url) {
     set(IDLE);
     throw new Error(`No preview available for “${track.title}”.`);
   }
-  const el = new Audio(url);
-  audio = el;
-  el.ontimeupdate = () => audio === el && set({ key, loading: false, progress: el.currentTime / (Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 30) });
-  el.onended = () => audio === el && stopPreview();
   duck?.(true);
   try {
-    await el.play();
-    if (audio === el) set({ key, loading: false, progress: 0 });
+    await tryPlay(url);
   } catch {
-    if (audio === el) stopPreview();
+    // A stored preview link can expire: look up a fresh one once.
+    url = track.previewUrl ? await lookUp() : undefined;
+    if (state.key !== key) return;
+    if (!url) return stopPreview();
+    await tryPlay(url).catch(() => state.key === key && stopPreview());
   }
 }
 

@@ -40,9 +40,15 @@ export default function SetRoom() {
   const [sosTip, setSosTip] = useState(true);
   const [code, setCode] = useState('');
 
+  // A "request" link (QR code, lock-screen card) opens the sheet once, then the link is consumed so
+  // the room refreshing (every few seconds, and after a request) doesn't keep reopening it.
+  const roomReady = !!room;
   useEffect(() => {
-    if (router.query.request === '1' && room && user) setSheet('Song');
-  }, [router.query.request, room, user]);
+    if (router.query.request !== '1' || !roomReady || !user) return;
+    setSheet('Song');
+    const { request: _consumed, ...rest } = router.query;
+    router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+  }, [router, roomReady, user]);
 
   useEffect(() => {
     const t = setTimeout(() => setSosTip(false), 6000);

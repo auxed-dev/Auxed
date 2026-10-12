@@ -20,7 +20,7 @@ const BONUS_TRACK_SUFFIX_RE = /(?:\s+[-–—/]\s*bonus\s+track|\s*[([]\s*bonus\
 
 /** Title qualifiers that mean a different recording. */
 const CREATIVE_VERSION_PATTERNS: [string, RegExp][] = [
-  ['live', /\b(?:live|canli|ao vivo|en vivo)\b/i],
+  ['live', /\b(?:live|canli|ao vivo|en vivo|recorded (?:in|at|live))\b/i],
   ['acoustic', /\b(?:acoustic|akustik|acustic[oa]|acoustique|unplugged|stripped)\b/i],
   ['remix', /\b(?:remix|rework|mashup)\b/i],
   ['dub', /\b(?:dub|dubbed)\b/i],
@@ -34,7 +34,7 @@ const CREATIVE_VERSION_PATTERNS: [string, RegExp][] = [
   ['session', /\bsession\b/i],
   ['alternate-speed', /\b(?:sped up|slowed(?: down)?|nightcore)\b/i],
   ['mix-format', /\b(?:mono|stereo)\b/i],
-  ['cover', /\bcover\b/i],
+  ['cover', /\b(?:cover|rendition)\b/i],
   ['a-cappella', /\ba ?ca?pp?ella\b/i],
   ['orchestral', /\b(?:orchestral|orchestra|symphonic)\b/i],
   ['re-recording', /\bre ?record(?:ed|ing)\b/i],
@@ -116,14 +116,17 @@ function versionSignature(name: string | null | undefined): string {
   return `${markers.join(',')}|${details.sort().join(',')}`;
 }
 
-/** Same kind of recording, and the same guest artists on both sides. */
+/**
+ * Same kind of recording, and every guest artist the wanted song names is credited on the
+ * candidate. (Unlike SongMirror, a candidate may credit extra guests: catalogues often show
+ * "Song (feat. X)" where a request or a set list just says "Song" — it's the same recording, and
+ * a different length still rules out a different version.)
+ */
 export function recordingVersionsCompatible(name: string, artists: string | string[], candName: string, candArtists: string | string[]) {
   if (versionSignature(name) !== versionSignature(candName)) return false;
   const features = featuredArtists(name);
-  const candFeatures = featuredArtists(candName);
-  const credits = [...(Array.isArray(artists) ? artists : [artists]), ...features].join(' ');
-  const candCredits = [...(Array.isArray(candArtists) ? candArtists : [candArtists]), ...candFeatures].join(' ');
-  return features.every((g) => hasCredit(g, candCredits)) && candFeatures.every((g) => hasCredit(g, credits));
+  const candCredits = [...(Array.isArray(candArtists) ? candArtists : [candArtists]), ...featuredArtists(candName)].join(' ');
+  return features.every((g) => hasCredit(g, candCredits));
 }
 
 /** "title|artist" key that survives feat-credit and punctuation differences. */

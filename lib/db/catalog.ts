@@ -119,12 +119,12 @@ export const T = {
   "walking": {
     "title": "Walking On A Dream",
     "artist": "Empire Of The Sun",
-    "album": "Walking On A Dream (Reimagined)",
-    "artwork": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/a0/d5/99/a0d5999f-08e5-3ca5-4f41-b4970a09f91f/26UM1IM02464.rgb.jpg/600x600bb.jpg",
-    "durationSec": 414,
+    "album": "Walking on a Dream (10th Anniversary Edition)",
+    "artwork": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/3e/42/a7/3e42a78d-57a3-fd69-6703-14d51205dd4c/13UMGIM24968.rgb.jpg/600x600bb.jpg",
+    "durationSec": 198,
     "genre": "House",
-    "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/72/de/f8/72def8ab-49d1-bfe6-45f4-a9f1a4609c77/mzaf_5678321939973968004.plus.aac.p.m4a",
-    "externalId": "6798959879",
+    "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/35/73/67/35736748-bb91-76df-e742-b870060fa52e/mzaf_8235749994901479240.plus.aac.p.m4a",
+    "externalId": "1449912309",
     "source": "itunes"
   },
   "helluva": {
@@ -215,23 +215,23 @@ export const T = {
   "drive": {
     "title": "Drive (feat. Delilah Montagu)",
     "artist": "Black Coffee & David Guetta",
-    "album": "Drive (feat. Delilah Montagu) - Single",
-    "artwork": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/2e/52/32/2e5232e9-4c75-e799-0200-c56a090777e1/00602577021367.rgb.jpg/600x600bb.jpg",
-    "durationSec": 191,
+    "album": "7: Anniversary Edition",
+    "artwork": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/ca/2f/6b/ca2f6b01-1d80-f8ed-22a0-80970d9ff112/5054197805219.jpg/600x600bb.jpg",
+    "durationSec": 186,
     "genre": "House",
-    "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/fd/09/a8/fd09a854-88a1-5330-cfc8-93064cdb8648/mzaf_12115250890058984442.plus.aac.p.m4a",
-    "externalId": "1433879362",
+    "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/11/ee/0c/11ee0c8b-5b81-6462-b360-58ee7e124277/mzaf_484865306257644354.plus.aac.p.m4a",
+    "externalId": "1705899777",
     "source": "itunes"
   },
   "photograph": {
     "title": "Photograph",
     "artist": "Ed Sheeran",
-    "album": "Disc 1 Live",
-    "artwork": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/f9/c8/96/f9c896ef-986e-e60c-0c20-d2c77918832f/5021732586186.jpg/600x600bb.jpg",
-    "durationSec": 313,
+    "album": "x (Wembley Edition)",
+    "artwork": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/b8/64/c0/b864c06f-e1e9-640d-f040-3e3a892de5ac/825646962679.jpg/600x600bb.jpg",
+    "durationSec": 259,
     "genre": "Pop",
-    "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/eb/59/df/eb59df6e-af06-976e-ece9-ef7dc748035b/mzaf_10160991026999575339.plus.aac.p.m4a",
-    "externalId": "1784251613",
+    "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/bb/c0/b3/bbc0b360-3d1f-1c1c-908e-a585a79dc716/mzaf_12084574462296741453.plus.aac.p.m4a",
+    "externalId": "1049108509",
     "source": "itunes"
   },
   "thula": {

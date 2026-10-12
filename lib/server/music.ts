@@ -2,12 +2,9 @@ import type { Track } from '../types';
 import { bestMatch, looseName, normalizeIsrc, trackKey } from '../matching';
 
 /**
- * Song search for requests. Uses Spotify (client-credentials) when SPOTIFY_CLIENT_ID/SECRET are set,
- * otherwise the public iTunes Search API. Results are cached for 10 minutes per query.
+ * Catalogue helpers: iTunes / Apple Music (no key) and Spotify (client credentials). The combined,
+ * ranked search across every catalogue lives in songSearch.ts.
  */
-
-const cache = new Map<string, { at: number; tracks: Track[] }>();
-const TTL = 10 * 60_000;
 
 const GENRES: Record<string, string> = {
   'Hip-Hop/Rap': 'Hip-Hop',
@@ -18,20 +15,17 @@ const GENRES: Record<string, string> = {
   'R&B/Soul': 'R&B',
 };
 
-export async function searchTracks(query: string, limit = 20): Promise<Track[]> {
-  const q = query.trim().slice(0, 100);
-  if (!q) return [];
-  const key = `${q.toLowerCase()}|${limit}`;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL) return hit.tracks;
-  const tracks = process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET ? await spotify(q, limit) : await itunes(q, limit);
-  cache.set(key, { at: Date.now(), tracks });
-  if (cache.size > 500) cache.delete(cache.keys().next().value as string);
-  return tracks;
+export const spotifyEnabledForSearch = () => !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
+
+/** Spotify search with each track's popularity (0..1). */
+export async function searchSpotify(q: string, limit = 20): Promise<(Track & { popularity?: number })[]> {
+  return spotify(q.trim().slice(0, 100), limit);
 }
 
-async function itunes(q: string, limit: number): Promise<Track[]> {
-  const country = process.env.MUSIC_COUNTRY ?? 'ZA';
+/** iTunes search in a given storefront (e.g. 'US' when a song isn't in the local store). */
+export const searchItunesIn = (q: string, limit: number, country: string) => itunes(q.trim().slice(0, 100), limit, country);
+
+async function itunes(q: string, limit: number, country = process.env.MUSIC_COUNTRY ?? 'ZA'): Promise<Track[]> {
   const url = `https://itunes.apple.com/search?${new URLSearchParams({ term: q, entity: 'song', limit: String(limit), country })}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`iTunes search failed (${res.status})`);
@@ -101,7 +95,7 @@ export async function spotifyTrack(id: string): Promise<Track | null> {
   };
 }
 
-async function spotify(q: string, limit: number): Promise<Track[]> {
+async function spotify(q: string, limit: number): Promise<(Track & { popularity?: number })[]> {
   const tokenValue = await spotifyAuth();
   const market = process.env.MUSIC_COUNTRY ?? 'ZA';
   const res = await fetch(`https://api.spotify.com/v1/search?${new URLSearchParams({ q, type: 'track', limit: String(Math.min(limit, 50)), market })}`, {
@@ -119,6 +113,7 @@ async function spotify(q: string, limit: number): Promise<Track[]> {
     source: 'spotify' as const,
     externalId: t.id,
     isrc: t.external_ids?.isrc ? normalizeIsrc(t.external_ids.isrc) : undefined,
+    popularity: typeof t.popularity === 'number' ? t.popularity / 100 : undefined,
   }));
 }
 
@@ -133,8 +128,12 @@ export async function findOnItunes(t: Pick<Track, 'title' | 'artist' | 'duration
   const hit = itunesMatches.get(key);
   if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.track;
   const firstArtist = t.artist.split(/,|&| feat\.| ft\.| x /i)[0].trim();
-  const results = await itunes(`${firstArtist} ${looseName(t.title)}`, 10).catch(() => [] as Track[]);
-  const track = bestMatch({ title: t.title, artist: t.artist, durationMs: t.durationSec * 1000 }, results, (r) => ({ title: r.title, artist: r.artist, durationMs: r.durationSec * 1000 }));
+  const wanted = { title: t.title, artist: t.artist, durationMs: t.durationSec * 1000 };
+  const describe = (r: Track) => ({ title: r.title, artist: r.artist, durationMs: r.durationSec * 1000 });
+  const term = `${firstArtist} ${looseName(t.title)}`;
+  let track = bestMatch(wanted, await itunes(term, 10).catch(() => [] as Track[]), describe);
+  // Not in the local store: the US store has the widest catalogue (previews play anywhere).
+  if (!track && (process.env.MUSIC_COUNTRY ?? 'ZA').toUpperCase() !== 'US') track = bestMatch(wanted, await itunes(term, 10, 'US').catch(() => [] as Track[]), describe);
   itunesMatches.set(key, { at: Date.now(), track });
   if (itunesMatches.size > 2000) itunesMatches.delete(itunesMatches.keys().next().value as string);
   return track;
@@ -153,7 +152,8 @@ export function sanitizeTrack(raw: unknown): Track | null {
     const u = s(v, 1000);
     return u && u.startsWith('https://') ? u : undefined;
   };
-  const source = t.source === 'spotify' || t.source === 'catalog' ? t.source : 'itunes';
+  const source = t.source === 'spotify' || t.source === 'catalog' || t.source === 'deezer' || t.source === 'youtube' ? t.source : 'itunes';
+  const preview = https(t.previewUrl);
   return {
     title,
     artist,
@@ -161,7 +161,8 @@ export function sanitizeTrack(raw: unknown): Track | null {
     artwork: https(t.artwork),
     durationSec: Math.round(durationSec),
     genre: s(t.genre, 60),
-    previewUrl: https(t.previewUrl),
+    // Deezer preview links expire within hours; a fresh one is looked up when someone listens.
+    previewUrl: preview && !/\.dzcdn\.net\//.test(preview) ? preview : undefined,
     source,
     externalId: s(t.externalId, 100),
     isrc: s(t.isrc, 20) ? normalizeIsrc(s(t.isrc, 20)) : undefined,
