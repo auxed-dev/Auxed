@@ -16,6 +16,7 @@ import { HttpError, bad, forbidden, notFound } from '../http';
 import type { AuthedUser } from '../session';
 import { spotifyAccess, spotifyNowPlaying, spotifyQueue, spotifyUriFor, youtubeIdFor } from '../musicConnect';
 import { findOnItunes } from '../music';
+import { recordPlay } from './setPlays';
 
 /** The AUXED Player counts as open while it has checked in within this window. */
 const PLAYER_ONLINE_MS = 60_000;
@@ -129,6 +130,7 @@ export async function syncExternal(db: DB, perf: PerformanceRow): Promise<Perfor
     .set({ nowPlaying, playback: { ...pb, lastError: error } })
     .where(eq(performances.id, perf.id))
     .returning();
+  if (nowPlaying) await recordPlay(db, perf.id, nowPlaying);
   if (changed && nowPlaying) notifyNowPlaying(db, perf.id, await venueNameOf(db, perf), nowPlaying);
   return updated ?? perf;
 }
@@ -229,6 +231,7 @@ export async function playerEvent(
     .update(performances)
     .set({ nowPlaying, setCursor: ev.requestId ? perf.setCursor : perf.setCursor + 1, wentLiveAt: perf.wentLiveAt ?? new Date() })
     .where(eq(performances.id, perf.id));
+  await recordPlay(db, perf.id, nowPlaying);
   notifyNowPlaying(db, perf.id, await venueNameOf(db, perf), nowPlaying);
   return { ok: true };
 }

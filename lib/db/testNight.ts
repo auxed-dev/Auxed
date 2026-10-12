@@ -13,6 +13,7 @@ import type { Track } from '../types';
 import { newId } from '../server/crypto';
 import { liveWhere } from '../server/services/core';
 import { closePerformance } from '../server/services/rooms';
+import { recordPlay } from '../server/services/setPlays';
 
 const H = 3600_000;
 const MEMBER_CODE = 'CARPET-VIP';
@@ -37,11 +38,9 @@ export async function setUpTestNight(db: DB, djName = 'JackBoy', venueId = 'v_ca
   const timing = { startsAt: new Date(now - 30 * 60_000), endsAt: new Date(now + 6 * H), wentLiveAt: new Date(now - 30 * 60_000) };
   let id = mine?.id;
   if (id) {
-    const [existing] = await db.select({ playback: performances.playback }).from(performances).where(eq(performances.id, id)).limit(1);
-    await db
-      .update(performances)
-      .set({ ...timing, setlist, ...(existing?.playback ? {} : { nowPlaying: { track: setlist[0], startedAt: new Date(now - 40_000).toISOString() } }) })
-      .where(eq(performances.id, id));
+    // A fresh start: nothing playing until the DJ (or a player) plays something.
+    await db.update(performances).set({ ...timing, setlist, playback: null, nowPlaying: null }).where(eq(performances.id, id));
+    await recordPlay(db, id, null);
   } else {
     id = newId();
     await db.insert(performances).values({
@@ -53,7 +52,7 @@ export async function setUpTestNight(db: DB, djName = 'JackBoy', venueId = 'v_ca
       crowdEstimate: 1200,
       imageUrl: v.imageUrl ?? IMG.carpetShop,
       setlist,
-      nowPlaying: { track: setlist[0], startedAt: new Date(now - 40_000).toISOString() },
+      nowPlaying: null,
       createdById: u.id,
     });
     // A few requests from the sample crowd: two waiting for the DJ, three accepted.

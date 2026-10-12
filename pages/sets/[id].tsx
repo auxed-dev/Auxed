@@ -6,6 +6,7 @@ import { Screen } from '@/components/Screen';
 import { ErrorNote, Marquee, Sheet } from '@/components/ui';
 import { RequestCard, RequestSlot } from '@/components/RequestCard';
 import { RequestSheet } from '@/components/RequestSheet';
+import { useAuxIn } from '@/lib/client/auxin';
 import { CommentBar } from '@/components/CommentBar';
 import { VenueLogo } from '@/components/VenueLogo';
 import { LogoA } from '@/components/Brand';
@@ -29,6 +30,7 @@ export default function SetRoom() {
   const router = useRouter();
   const toast = useToast();
   const { user } = useSession();
+  const aux = useAuxIn();
   const id = typeof router.query.id === 'string' ? router.query.id : null;
   const { data: room, error, reload, mutate } = useApi<RoomDTO>(id ? `/api/performances/${id}` : null, { refreshMs: 5000 });
   const { data: favs, reload: reloadFavs } = useApi<{ keys: string[] }>(user ? '/api/me/favorites?keys=1' : null);
@@ -350,6 +352,20 @@ export default function SetRoom() {
       </button>
       {user && p.status === 'LIVE' && np && <NowPlayingReactions performanceId={p.id} onSent={reload} />}
       {!home && <AuxInCard venueId={room.venue.id} />}
+      {p.status === 'ENDED' && (
+        <button
+          type="button"
+          onClick={() => aux.openPlaylist(p.id, home ? p.title : room.venue.name).catch((err) => toast(errorMessage(err), 'error'))}
+          className="mx-[18px] mt-3 flex w-[calc(100%-36px)] items-center gap-3 rounded-[18px] border border-white/10 bg-black/35 px-3.5 py-3 text-left"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-[18px]">🎵</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-din text-[10px] font-bold uppercase tracking-[0.16em] text-lime">Set playlist</span>
+            <span className="block truncate font-ui text-[13px] text-white/85">Everything that played tonight, in order</span>
+          </span>
+          <span className="shrink-0 rounded-full bg-lime px-3.5 py-2 font-din text-[11px] font-bold uppercase tracking-wider text-lime-ink">Play</span>
+        </button>
+      )}
 
       {manage && p.status !== 'ENDED' && (
         <div className="mx-[18px] mt-3 flex gap-2">
@@ -361,6 +377,11 @@ export default function SetRoom() {
             <button type="button" onClick={() => control('skip')} className="flex flex-1 items-center justify-center gap-2 rounded-full bg-white/15 py-2.5 font-din text-[13px] font-bold uppercase tracking-wider text-white">
               <IconSkip size={14} /> Next Track
             </button>
+          )}
+          {!home && p.status === 'LIVE' && (
+            <Link href="/owner/aux-in" className="flex items-center justify-center rounded-full bg-white/15 px-4 py-2.5 font-din text-[12px] font-bold uppercase tracking-wider text-white">
+              🎧 AUX IN
+            </Link>
           )}
           <button type="button" onClick={() => setPanel('autoqueue')} className="flex items-center justify-center rounded-full bg-white/15 px-4 py-2.5 font-din text-[12px] font-bold uppercase tracking-wider text-white">
             {room.playback ? `Auto · ${room.playback.provider === 'APPLE_MUSIC' ? 'Apple' : room.playback.provider === 'YOUTUBE' ? 'YouTube' : 'Spotify'}` : 'Auto-queue'}

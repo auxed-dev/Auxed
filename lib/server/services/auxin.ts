@@ -10,10 +10,10 @@
  * (the venue's member code). Listening only works on site: within range of the venue or checked in
  * with the door QR in the last 6 hours.
  */
-import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { DB } from '../../db';
 import { sampleDataEnabled } from '../../db';
-import { auxPasses, auxPeers, auxStreams, ledger, performances, users, venueCheckins, venues } from '../../db/schema';
+import { auxPasses, auxPeers, auxStreams, ledger, performances, performers, users, venueCheckins, venues } from '../../db/schema';
 import { newId } from '../crypto';
 import { HttpError, bad, forbidden, notFound } from '../http';
 import type { AuthedUser } from '../session';
@@ -132,10 +132,23 @@ export async function buyPass(db: DB, user: AuthedUser, venueId: string, kind: '
 
 /* ------------------------------------------------------------------------- broadcaster */
 
+/** Venues where this DJ's set is live right now (they can broadcast AUX IN from their own laptop). */
+async function djLiveVenueIds(db: DB, user: AuthedUser): Promise<string[]> {
+  if (user.role !== 'PERFORMER') return [];
+  const rows = await db
+    .select({ venueId: performances.venueId })
+    .from(performances)
+    .innerJoin(performers, eq(performers.id, performances.performerId))
+    .where(and(eq(performers.userId, user.id), liveWhere()));
+  return [...new Set(rows.map((r) => r.venueId).filter((x): x is string => !!x))];
+}
+
+/** The venue owner, or the DJ playing there now (when the venue offers AUX IN), can broadcast. */
 async function ownedVenue(db: DB, user: AuthedUser, venueId: string) {
   const v = await venueOr404(db, venueId);
-  if (v.ownerId !== user.id && user.role !== 'ADMIN') throw forbidden('Only the venue can broadcast AUX IN.');
-  return v;
+  if (v.ownerId === user.id || user.role === 'ADMIN') return v;
+  if (v.auxInEnabled && (await djLiveVenueIds(db, user)).includes(v.id)) return v;
+  throw forbidden('Only the venue, or the DJ playing there now, can broadcast AUX IN.');
 }
 
 export async function startStream(db: DB, user: AuthedUser, venueId: string, zone: string) {
@@ -222,7 +235,10 @@ export async function closePeer(db: DB, user: AuthedUser, peerId: string) {
 
 /** Owner view: AUX IN settings and numbers for each of their venues. */
 export async function ownerAuxIn(db: DB, user: AuthedUser) {
-  const rows = await db.select().from(venues).where(eq(venues.ownerId, user.id));
+  const owned = await db.select().from(venues).where(eq(venues.ownerId, user.id));
+  const djVenues = await djLiveVenueIds(db, user);
+  const playing = djVenues.length ? await db.select().from(venues).where(and(inArray(venues.id, djVenues), eq(venues.auxInEnabled, true))) : [];
+  const rows = [...owned, ...playing.filter((p) => !owned.some((o) => o.id === p.id))];
   const out = [];
   for (const v of rows) {
     const stream = await liveStream(db, v.id);
@@ -233,6 +249,8 @@ export async function ownerAuxIn(db: DB, user: AuthedUser) {
     out.push({
       venueId: v.id,
       name: v.name,
+      /** Owners change the settings; a DJ only broadcasts. */
+      canEdit: v.ownerId === user.id || user.role === 'ADMIN',
       enabled: v.auxInEnabled,
       dayPassCents: v.auxInDayPassCents,
       memberCode: v.auxInMemberCode,

@@ -4,6 +4,7 @@ import { Screen, TitleBar } from '@/components/Screen';
 import { Toggle } from '@/components/ui';
 import { Skeleton } from '@/components/Loader';
 import { useToast } from '@/components/Toast';
+import { useSession } from '@/lib/client/session';
 import { useApi } from '@/lib/client/useApi';
 import { api, patch, post, del, errorMessage } from '@/lib/client/api';
 import { waitForIce } from '@/lib/client/auxin';
@@ -16,6 +17,8 @@ const SYSTEM_AUDIO = '__system_audio__';
 interface VenueAux {
   venueId: string;
   name: string;
+  /** Owners change settings; the DJ playing there only broadcasts. */
+  canEdit: boolean;
   enabled: boolean;
   dayPassCents: number;
   memberCode: string | null;
@@ -31,6 +34,8 @@ interface VenueAux {
  */
 const AuxInBroadcaster: AuxedPage = () => {
   const toast = useToast();
+  const { user } = useSession();
+  const dj = user?.role === 'PERFORMER';
   const { data, reload } = useApi<{ venues: VenueAux[]; monthPassCents: number }>('/api/owner/auxin');
   const [venueId, setVenueId] = useState('');
   const [zone, setZone] = useState('Main floor');
@@ -198,15 +203,17 @@ const AuxInBroadcaster: AuxedPage = () => {
   }
 
   return (
-    <Screen nav theme="purple" title="AUX IN">
-      <TitleBar title="AUX IN" back="/owner" />
+    <Screen nav theme={dj ? 'green' : 'purple'} title="AUX IN">
+      <TitleBar title="AUX IN" back={dj ? '/artist' : '/owner'} />
       <p className="-mt-3 mb-4 px-7 font-ui text-[13px] leading-relaxed text-white/65">
-        Stream your speakers to members&apos; earphones. Plug the mixer&apos;s line-out into this device (a USB audio interface works best), choose it below and go live.
+        {dj
+          ? "Stream your set to the crowd's earphones. Choose \"This computer's sound\" to send exactly what your DJ software plays, or plug your mixer's line-out in, and go live."
+          : "Stream your speakers to members' earphones. Plug the mixer's line-out into this device (a USB audio interface works best), choose it below and go live."}
       </p>
       {!data ? (
         <Skeleton className="mx-4 h-[300px]" />
       ) : data.venues.length === 0 ? (
-        <p className="panel mx-4 px-5 py-6 text-center font-ui text-[14px] text-white/70">Register a venue first.</p>
+        <p className="panel mx-4 px-5 py-6 text-center font-ui text-[14px] text-white/70">{dj ? 'Go live at a venue that offers AUX IN, then come back here to stream your set.' : 'Register a venue first.'}</p>
       ) : (
         <section className="glow-card mx-[10px] flex flex-col gap-4 px-5 pb-7 pt-6">
           <div>
@@ -221,6 +228,8 @@ const AuxInBroadcaster: AuxedPage = () => {
           </div>
           {venue && (
             <>
+              {venue.canEdit && (
+              <>
               <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 px-4 py-3">
                 <span>
                   <span className="block font-ui text-[14px] font-semibold text-white">Offer AUX IN at {venue.name}</span>
@@ -243,6 +252,8 @@ const AuxInBroadcaster: AuxedPage = () => {
               <p className="-mt-2 px-1 font-ui text-[11px] text-white/50">
                 Members with the code listen free. Everyone else can buy a Day Pass here, or use the AUX Pass ({rand(data.monthPassCents / 100)} / 30 days, all AUX IN venues).
               </p>
+              </>
+              )}
 
               <div className="rounded-2xl bg-black/35 p-4">
                 <div className="flex items-center justify-between">
@@ -290,5 +301,5 @@ const AuxInBroadcaster: AuxedPage = () => {
   );
 };
 
-AuxInBroadcaster.auth = ['OWNER'];
+AuxInBroadcaster.auth = ['OWNER', 'PERFORMER'];
 export default AuxInBroadcaster;

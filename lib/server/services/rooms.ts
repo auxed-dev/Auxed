@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { REACTIONS } from '../../reactions';
 import { sampleCrowdTick } from '../../db/sampleCrowd';
 import type { DB } from '../../db';
-import { earnings, performances, posts, requestReactions, requests, requestVotes, venues } from '../../db/schema';
+import { earnings, performances, performers, posts, requestReactions, requestVotes, requests, venues } from '../../db/schema';
 import { blockedWord, exceedsMaxLength, requestPriceCents } from '../../pricing';
 import type { CanRequest, NowPlaying, RoomDTO, Track } from '../../types';
 import { newId } from '../crypto';
@@ -27,6 +27,8 @@ import { createHomeRequest, getPerformance, loadHomeRoom, requireSessionMember }
 import { checkSpendCap } from './nightOut';
 import { syncExternal } from './playback';
 import { checkSongClash } from './songClash';
+import { recordPlay } from './setPlays';
+import { sampleDataEnabled } from '../../db';
 import { notifyNowPlaying, notifyUser } from '../push';
 
 /** Artists can open a set for requests up to this long before its slot. */
@@ -44,15 +46,37 @@ function endOf(np: NowPlaying): number {
   return new Date(np.startedAt).getTime() + np.track.durationSec * 1000;
 }
 
+/** Development sample sets (DJs without a real login) run a simulated DJ so the demo stays alive. */
+async function simulatedDj(db: DB, perf: PerformanceRow) {
+  if (!sampleDataEnabled()) return false;
+  if (perf.kind === 'HOME') return !!perf.hostUserId?.startsWith('u_');
+  if (!perf.performerId) return false;
+  const [pf] = await db.select({ userId: performers.userId }).from(performers).where(eq(performers.id, perf.performerId)).limit(1);
+  return !pf?.userId || pf.userId.startsWith('u_');
+}
+
+/** How long a finished song stays "now playing" when nobody plays anything after it. */
+const NOW_PLAYING_GRACE_MS = 3 * 60_000;
+
 /**
- * Advances "now playing" for a live set: when the current track has run its length the next
- * approved request (highest net votes first) plays, otherwise the next track of the artist's own
- * set. Artists can override with play-now / skip from their dashboard.
+ * "Now playing" changes when someone actually plays something: the DJ (play a request, skip to the
+ * next), the AUXED Player, or the connected Spotify. Nothing moves on by itself — a song that has
+ * run its length with nothing after it simply stops showing. `force` is the DJ's skip: the next
+ * approved request (most votes first), otherwise the next song of the artist's set list.
+ * (Development sample sets also simulate a DJ, so the demo rooms stay alive.)
  */
-export async function advancePlayback(db: DB, perf: PerformanceRow): Promise<PerformanceRow> {
-  // Real playback (Spotify / AUXED Player) drives "now playing" instead of the simulation.
+export async function advancePlayback(db: DB, perf: PerformanceRow, opts: { force?: boolean } = {}): Promise<PerformanceRow> {
+  // Real playback (Spotify / AUXED Player) drives "now playing" itself.
   if (perf.playback) return perf;
   if (perfStatus(perf) !== 'LIVE') return perf;
+  if (!opts.force && !(await simulatedDj(db, perf))) {
+    const cur = perf.nowPlaying;
+    if (!cur || Date.now() < endOf(cur) + NOW_PLAYING_GRACE_MS) return perf;
+    if (cur.requestId) await db.update(requests).set({ status: 'PLAYED', playedAt: new Date(cur.startedAt) }).where(and(eq(requests.id, cur.requestId), eq(requests.status, 'PLAYING')));
+    const [cleared] = await db.update(performances).set({ nowPlaying: null }).where(eq(performances.id, perf.id)).returning();
+    await recordPlay(db, perf.id, null);
+    return cleared ?? perf;
+  }
   let np = perf.nowPlaying ?? null;
   let cursor = perf.setCursor;
   const now = Date.now();
@@ -88,6 +112,7 @@ export async function advancePlayback(db: DB, perf: PerformanceRow): Promise<Per
     .set({ nowPlaying: np, setCursor: cursor })
     .where(eq(performances.id, perf.id))
     .returning();
+  await recordPlay(db, perf.id, np);
   if (np && np.track.title !== perf.nowPlaying?.track.title) {
     const venueName = perf.venueId ? (await db.select({ n: venues.name }).from(venues).where(eq(venues.id, perf.venueId)).limit(1))[0]?.n ?? perf.title : perf.title;
     notifyNowPlaying(db, perf.id, venueName, np);
@@ -281,16 +306,9 @@ export async function decideRequest(db: DB, user: AuthedUser, requestId: string,
     }
     await db.update(requests).set({ status: 'PLAYING' }).where(eq(requests.id, req.id));
     const fresh = (await db.select().from(requests).where(eq(requests.id, req.id)))[0];
-    await db
-      .update(performances)
-      .set({
-        nowPlaying: {
-          track: fresh.track ?? micTrack(fresh.message ?? '', 'Auxee'),
-          startedAt: new Date().toISOString(),
-          requestId: fresh.id,
-        },
-      })
-      .where(eq(performances.id, perf.id));
+    const np: NowPlaying = { track: fresh.track ?? micTrack(fresh.message ?? '', 'Auxee'), startedAt: new Date().toISOString(), requestId: fresh.id };
+    await db.update(performances).set({ nowPlaying: np }).where(eq(performances.id, perf.id));
+    await recordPlay(db, perf.id, np);
     return { status: 'PLAYING' };
   }
   return { status: 'QUEUED' };
@@ -327,7 +345,7 @@ export async function controlPerformance(db: DB, user: AuthedUser, performanceId
         .where(eq(performances.id, perf.id));
     }
     const fresh = (await db.select().from(performances).where(eq(performances.id, perf.id)))[0];
-    await advancePlayback(db, fresh);
+    await advancePlayback(db, fresh, { force: true });
     return { ok: true };
   }
   await closePerformance(db, perf.id);
@@ -336,6 +354,7 @@ export async function controlPerformance(db: DB, user: AuthedUser, performanceId
 
 /** End a set: refund anything the artist never got to and reverse its earnings. Used by "End set" and by housekeeping. */
 export async function closePerformance(db: DB, performanceId: string) {
+  await recordPlay(db, performanceId, null);
   await db.transaction(async (tx) => {
     await tx.update(performances).set({ endedAt: new Date(), nowPlaying: null }).where(eq(performances.id, performanceId));
     const pending = await tx

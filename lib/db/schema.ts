@@ -515,6 +515,22 @@ export const musicConnections = pgTable(
 );
 
 /** Cache: our track -> Spotify URI / YouTube video id, so searches aren't repeated. */
+/** Every song that actually played in a set, in order: the set's playlist, live and after it ends. */
+export const setPlays = pgTable(
+  'set_plays',
+  {
+    id: text('id').primaryKey(),
+    performanceId: text('performance_id')
+      .notNull()
+      .references(() => performances.id, { onDelete: 'cascade' }),
+    track: jsonb('track').$type<Track>().notNull(),
+    requestId: text('request_id'),
+    startedAt: ts('started_at').notNull(),
+    endedAt: ts('ended_at'),
+  },
+  (t) => [index('set_plays_perf_idx').on(t.performanceId, t.startedAt)],
+);
+
 export const trackLinks = pgTable('track_links', {
   key: text('key').primaryKey(),
   spotifyUri: text('spotify_uri'),
