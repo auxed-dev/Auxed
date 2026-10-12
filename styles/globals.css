@@ -1,0 +1,373 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Role themes. Each holds "r g b" triplets so Tailwind opacity modifiers work (bg-accent/40).
+ * blue = AUXee, green = artist, purple = owner/management, olive = The People's Trinkets.
+ */
+:root {
+  /* App column width: full width on phones; on desktop the app shows at iPhone design width (402pt). */
+  --app-w: 430px;
+}
+@media (min-width: 640px) {
+  :root {
+    --app-w: 402px;
+  }
+}
+
+:root,
+[data-theme='blue'] {
+  --accent: 44 73 200;
+  --accent-soft: 102 131 255;
+  --accent-deep: 5 20 81;
+  --surface: 18 37 119;
+  --chip: 16 30 102;
+  --nav: 31 47 150;
+  --fab: 23 40 135;
+  --card: #2c49c8;
+  --card-rgb: 44 73 200;
+  --pill-bg: #122577;
+  --pill-inner: rgba(102, 131, 255, 1);
+  --pill-glow: rgba(121, 146, 250, 0.9);
+  --page-bg: radial-gradient(130% 70% at 50% 42%, #1d38b8 0%, #0c1a6e 38%, #040a33 70%, #02041a 100%);
+}
+
+[data-theme='green'] {
+  --accent: 46 94 77;
+  --accent-soft: 165 209 194;
+  --accent-deep: 10 26 20;
+  --surface: 31 70 56;
+  --chip: 22 44 36;
+  --nav: 0 0 0;
+  --fab: 46 94 77;
+  --card: #2f5f4e;
+  --card-rgb: 47 95 78;
+  --pill-bg: #2e5e4d;
+  --pill-inner: rgba(165, 209, 194, 1);
+  --pill-glow: rgba(255, 255, 255, 0.55);
+  --page-bg: radial-gradient(120% 60% at 50% 100%, #0d2a20 0%, #050c09 45%, #000 100%);
+}
+
+[data-theme='purple'] {
+  --accent: 122 31 208;
+  --accent-soft: 200 86 224;
+  --accent-deep: 30 6 60;
+  --surface: 52 14 92;
+  --chip: 40 12 70;
+  --nav: 0 0 0;
+  --fab: 84 26 150;
+  --card: #721bb9;
+  --card-rgb: 114 27 185;
+  /* Owner chart cards are near-black with only a hint of purple. */
+  --chart-glow: 0.16;
+  --chart-base: #070110;
+  --pill-bg: #001532;
+  --pill-inner: rgba(200, 86, 224, 1);
+  --pill-glow: rgba(255, 255, 255, 0.55);
+  --page-bg: radial-gradient(120% 60% at 50% 100%, #2a0a4d 0%, #0b0314 45%, #000 100%);
+}
+
+[data-theme='olive'] {
+  --accent: 168 164 58;
+  --accent-soft: 214 210 120;
+  --accent-deep: 40 38 10;
+  --surface: 120 117 40;
+  --chip: 70 68 20;
+  --nav: 0 0 0;
+  --fab: 120 117 40;
+  --card: #a9a63e;
+  --card-rgb: 169 166 62;
+  --pill-bg: #5c5a1c;
+  --pill-inner: rgba(214, 210, 120, 1);
+  --pill-glow: rgba(255, 255, 255, 0.5);
+  --page-bg: radial-gradient(120% 60% at 50% 100%, #1e1d06 0%, #070700 45%, #000 100%);
+}
+
+html,
+body {
+  background: #000;
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: var(--font-saira), system-ui, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Inputs never zoom on iOS (needs >= 16px). */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+@layer components {
+  /* The phone-width app column. On desktop it sits centred on black. */
+  .app-frame {
+    @apply relative mx-auto min-h-[100dvh] w-full max-w-[var(--app-w)] overflow-x-hidden;
+    background: var(--page-bg);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Glass pill with the inner glow from the designs (SIGN UP / role buttons). */
+  .glass-pill {
+    @apply relative flex items-center justify-center rounded-full font-wide font-extrabold uppercase tracking-wide text-white;
+    background: var(--pill-bg);
+    box-shadow:
+      inset 0 4px 40px var(--pill-inner),
+      0 6px 60px -12px var(--pill-glow);
+  }
+
+  /* Lime active / grey inactive pill tabs. */
+  .tab-pill {
+    @apply flex h-[36px] min-w-[85px] shrink-0 items-center justify-center rounded-full px-3 font-ui text-[15px] leading-none transition-all duration-200;
+    color: rgba(30, 30, 36, 0.7);
+    background: linear-gradient(180deg, rgba(150, 150, 160, 0.78), rgba(105, 105, 115, 0.72));
+    box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.15), inset 0 -3px 8px rgba(0, 0, 0, 0.35);
+  }
+  .tab-pill[data-active='true'] {
+    color: #1c2a06;
+    background: linear-gradient(180deg, #dcff5c 0%, #d0ff34 55%, #b8e61f 100%);
+    box-shadow: 0 0 22px rgba(208, 255, 52, 0.35), inset 0 2px 6px rgba(255, 255, 255, 0.45);
+  }
+  .tab-pill-blue {
+    color: rgba(18, 22, 50, 0.7);
+    background: linear-gradient(180deg, rgba(120, 130, 190, 0.45), rgba(80, 90, 150, 0.4));
+  }
+  /* Dashboard tabs: 90 x 40, translucent slate that picks up the role colour behind it, engraved text. */
+  .tab-pill-dash {
+    height: 40px;
+    min-width: 90px;
+  }
+  .tab-pill-dash:not([data-active='true']) {
+    color: rgba(34, 34, 38, 0.92);
+    background: linear-gradient(180deg, rgba(122, 126, 134, 0.5), rgba(96, 100, 108, 0.44));
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.08),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(0, 0, 0, 0.22);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /*
+   * Summary card = Figma "diamond" gradient: #050209 until 29.8%, then the role colour towards the
+   * edges. Fitted to the exported design: the diamond reaches 0.6 card-widths across and 1.11
+   * card-heights down, so the sides glow and the black diamond touches the top and bottom edges.
+   * Each quadrant is a corner-to-corner linear gradient, which draws |x|/a + |y|/b iso-lines.
+   */
+  .glow-card {
+    @apply relative overflow-hidden rounded-[22px];
+    isolation: isolate;
+    background: #050209;
+    box-shadow:
+      inset 0 4px 4px rgba(5, 2, 9, 0.9),
+      0 18px 40px -20px rgba(0, 0, 0, 0.9);
+  }
+  .glow-card::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 120%;
+    height: 222%;
+    transform: translate(-50%, -50%);
+    z-index: -2;
+    --d0: #050209;
+    background:
+      linear-gradient(to top left, var(--d0) 14.9%, var(--card) 50%) 0 0 / 50% 50% no-repeat,
+      linear-gradient(to top right, var(--d0) 14.9%, var(--card) 50%) 100% 0 / 50% 50% no-repeat,
+      linear-gradient(to bottom left, var(--d0) 14.9%, var(--card) 50%) 0 100% / 50% 50% no-repeat,
+      linear-gradient(to bottom right, var(--d0) 14.9%, var(--card) 50%) 100% 100% / 50% 50% no-repeat;
+  }
+  .glow-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+  }
+
+  /* Chart cards ("TRENDING SETS" etc.): dark top, role colour glowing up from the lower middle. */
+  .chart-card {
+    @apply relative overflow-hidden rounded-[16px];
+    background:
+      linear-gradient(180deg, rgba(5, 8, 8, 0.6) 0%, rgba(5, 8, 8, 0) 40%),
+      radial-gradient(
+        70% 100% at 50% 82%,
+        rgb(var(--card-rgb) / calc(0.72 * var(--chart-glow, 1))) 0%,
+        rgb(var(--card-rgb) / calc(0.56 * var(--chart-glow, 1))) 45%,
+        rgb(var(--card-rgb) / calc(0.36 * var(--chart-glow, 1))) 100%
+      ),
+      var(--chart-base, #050807);
+    box-shadow:
+      inset 0 0 28px rgba(0, 0, 0, 0.35),
+      0 6px 30px rgba(0, 0, 0, 0.55);
+  }
+
+  .badge-a {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55)) grayscale(1) brightness(0.92);
+    opacity: 0.92;
+  }
+
+  /* Softer panel (lists, chart cards). */
+  .panel {
+    @apply relative overflow-hidden rounded-[22px];
+    background: linear-gradient(160deg, rgb(var(--surface) / 0.55), rgb(var(--accent-deep) / 0.55));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .chip-btn {
+    @apply flex items-center justify-between gap-2 rounded-full pl-4 pr-1.5 font-ui text-[11px] font-semibold uppercase tracking-[0.02em] text-white/90;
+    height: 34px;
+    font-stretch: 78%;
+    background: rgb(var(--chip) / 0.9);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.35);
+  }
+
+  .round-glass {
+    @apply flex items-center justify-center rounded-full;
+    background: radial-gradient(circle at 50% 35%, rgb(var(--accent) / 0.95), rgb(var(--accent-deep) / 0.95));
+    box-shadow: 0 0 18px rgb(var(--accent-soft) / 0.55), inset 0 2px 6px rgba(255, 255, 255, 0.25);
+  }
+
+  .field {
+    @apply w-full rounded-full border border-white/10 bg-white/[0.07] px-5 py-3.5 font-ui text-[15px] text-white outline-none transition placeholder:text-white/40 focus:border-white/30 focus:bg-white/[0.11];
+  }
+
+  .field-area {
+    @apply w-full rounded-[20px] border border-white/10 bg-black/30 px-4 py-3 font-ui text-[14px] text-white outline-none placeholder:text-white/45 focus:border-white/30;
+  }
+
+  .label {
+    @apply mb-1.5 block pl-2 font-din text-[12px] font-semibold uppercase tracking-[0.12em] text-white/70;
+  }
+
+  .glow-text {
+    text-shadow: 0 0 18px rgba(255, 255, 255, 0.55), 0 0 4px rgba(255, 255, 255, 0.4);
+  }
+  .glow-text-soft {
+    text-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
+  }
+
+  .wide-x {
+    font-stretch: 125%;
+  }
+  .semi-x {
+    font-stretch: 112%;
+  }
+  .narrow-x {
+    font-stretch: 75%;
+  }
+
+  .shade-b {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0.78) 100%);
+  }
+  .shade-l {
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.35) 70%, rgba(0, 0, 0, 0.15) 100%);
+  }
+}
+
+/* Leaflet dark map tweaks */
+.leaflet-container {
+  background: #1b1b1d !important;
+  font-family: var(--font-saira), system-ui, sans-serif;
+}
+.leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.45) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+.auxed-dark-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.35);
+}
+.leaflet-div-icon {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Creative Controls sliders */
+.aux-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+.aux-range::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #0b1310, #1c2a24);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.aux-range::-moz-range-track {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #0b1310, #1c2a24);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.aux-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 22px;
+  margin-top: -7.5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #8fb3a5, #3e6457);
+  box-shadow: 0 0 8px rgb(var(--accent-soft) / 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.aux-range::-moz-range-thumb {
+  width: 11px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #8fb3a5, #3e6457);
+  box-shadow: 0 0 8px rgb(var(--accent-soft) / 0.6);
+}
+.aux-range:focus-visible {
+  outline: 2px solid rgb(var(--accent-soft));
+  outline-offset: 4px;
+  border-radius: 6px;
+}

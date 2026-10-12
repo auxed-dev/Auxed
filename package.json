@@ -1,0 +1,42 @@
+{
+  "name": "auxed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AUXED — power to the music lovers. Live song requests, On The Mic, the Wire Room and artist/venue dashboards as an installable mobile web app (PWA).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:reset": "node scripts/reset-local-db.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "autoprefixer": "^10.4.14",
+    "drizzle-orm": "^0.45.2",
+    "leaflet": "^1.9.4",
+    "next": "^14.2.35",
+    "pg": "^8.23.0",
+    "postcss": "^8.4.27",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.2.2",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.12",
+    "@types/node": "^20.3.1",
+    "@types/pg": "^8.15.6",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.0.15",
+    "@types/web-push": "^3.6.4",
+    "drizzle-kit": "^0.31.11"
+  },
+  "engines": {
+    "node": ">=18.18"
+  }
+}
